@@ -1,0 +1,2 @@
+import {requireAdmin,apiError} from '@/lib/server';
+export async function POST(request:Request){try{const {client}=await requireAdmin();const {call_id,click_id}=await request.json();if(typeof call_id!=='string'||typeof click_id!=='string')throw new Error('Invalid IDs');const {data,error}=await client.rpc('ga_confirm_match',{p_call:call_id,p_click:click_id});if(error)throw error;return Response.json({id:data});}catch(error){return apiError(error)}}

@@ -1,0 +1,3 @@
+import {requireAdmin,apiError} from '@/lib/server';
+export async function GET(){try{const {client}=await requireAdmin();const {data,error}=await client.from('ga_settings').select('window_seconds').eq('id',1).single();if(error)throw error;return Response.json(data);}catch(error){return apiError(error)}}
+export async function PATCH(request:Request){try{const {client}=await requireAdmin();const {window_seconds}=await request.json();if(!Number.isInteger(window_seconds)||window_seconds<1||window_seconds>3600)throw new Error('Invalid window');const {error}=await client.from('ga_settings').update({window_seconds}).eq('id',1);if(error)throw error;return Response.json({window_seconds});}catch(error){return apiError(error)}}
