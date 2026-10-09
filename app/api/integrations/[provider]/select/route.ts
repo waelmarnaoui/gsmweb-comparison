@@ -2,6 +2,7 @@ import {createClient} from '@supabase/supabase-js';
 import {requireAdmin,apiError} from '@/lib/server';
 import {ConnectionId,getConnection,managementGet,sameOrigin,saveConnection} from '@/lib/connections';
 import {IntegrationError} from '@/lib/integration-error';
+import {CRM_TABLES} from '@/lib/crm-reader';
 export async function POST(request:Request,{params}:{params:Promise<{provider:string}>}){try{
  const {user}=await requireAdmin();sameOrigin(request);const {provider}=await params;
  if(!['supabase_calls','supabase_crm'].includes(provider))throw new IntegrationError('Unknown connection.');
@@ -15,7 +16,7 @@ export async function POST(request:Request,{params}:{params:Promise<{provider:st
   projectKey=keys.find((k:{name:string;type?:string})=>k.type==='secret'||k.name==='service_role')?.api_key;
   if(!projectKey)throw new IntegrationError('No server API key is available. Approve Secrets Read in the Supabase OAuth registration.');
   const client=createClient('https://'+project_ref+'.supabase.co',projectKey,{auth:{persistSession:false,autoRefreshToken:false}});
-  for(const table of ['Client','Repair','GoogleAdsLeads','PaymentTransaction','RepairSettlement','SaleSettlement']){
+  for(const table of CRM_TABLES){
    const {error}=await client.from(table).select('*',{head:true,count:'exact'}).limit(1);
    if(error)throw new IntegrationError(`CRM table ${table} could not be read in the selected project. Verify its schema and API access.`);
   }
@@ -23,3 +24,4 @@ export async function POST(request:Request,{params}:{params:Promise<{provider:st
  await saveConnection(id,{...saved.credentials,...(projectKey?{project_key:projectKey}:{})},{project_ref,name:project.name},user.id);
  return Response.json({name:project.name,project_ref});
  }catch(error){return apiError(error);}}
+
