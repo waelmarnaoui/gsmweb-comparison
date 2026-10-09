@@ -27,7 +27,7 @@ The importer expects a header row with timestamp (or clicked_at), and optional e
 
 Sign in using the approved Supabase Auth administrator account, not your Supabase dashboard GitHub login. Open Settings > Check connections > Import website clicks. The app reads saved ga_calls and calculates candidates through ga_candidates using ga_settings.window_seconds. Default is 120 seconds. Confirmation uses the existing ga_confirm RPC and database uniqueness constraints.
 
-The dashboard shows the latest 500 calls in the past seven days; this is not an all-time report. Android status reports saved records, not a guarantee of current collector uptime. Google Sheets imports are manual in this update. The Android collector's existing upload schedule is unchanged.
+The dashboard shows the latest 500 calls starting 9 October 2026, midnight Bucharest time. Older calls are retained in the database but hidden. Android status reports saved records, not a guarantee of current collector uptime. Google Sheets imports are manual in this update. The Android collector's existing upload schedule is unchanged.
 
 CRM customer/payment mapping remains unavailable until actual table relationships and permissions are verified. Repair estimates are never used as payment amounts. Google Ads exports read only prepared ga_conversion_drafts; exporting does not upload conversions or mark them uploaded. No conversion drafts are fabricated from unverified CRM data.
 
