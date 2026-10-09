@@ -1,6 +1,7 @@
 import 'server-only';
 import {createSign,createHash} from 'node:crypto';
 import {IntegrationError} from './integration-error';
+import {configuredProvider,getConnection,connectionToken} from './connections';
 async function checkSheetResponse(response:Response){
  if(response.ok)return;
  const data=await response.json().catch(()=>null);
@@ -12,7 +13,11 @@ async function checkSheetResponse(response:Response){
  throw new IntegrationError('Google Sheets is temporarily unavailable. Retry shortly.',503);
 }
 export const sheetId=process.env.GOOGLE_SHEET_ID || '14wmk6KJ7p4d-p9KctSGj4MtKVk4w0XvH1qfvKox0Sgw';
-export function sheetsConfigured(){return Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_SHEETS_ACCESS_TOKEN);}
+export function sheetsConfigured(){return Boolean(configuredProvider('google')||process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_SHEETS_ACCESS_TOKEN);}
+export async function clickSheetSource(){
+ if(configuredProvider('google')){const saved=await getConnection('google');if(saved){if(!saved.metadata.sheet_id)throw new IntegrationError('Choose a spreadsheet from Google Drive in Connections first.');return {id:saved.metadata.sheet_id,range:saved.metadata.range,oauth:true};}}
+ return {id:sheetId,range:process.env.GOOGLE_SHEET_RANGE,oauth:false};
+}
 async function accessToken(){
  if(process.env.GOOGLE_SERVICE_ACCOUNT_JSON){
   let account;try{account=JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);}catch{throw new IntegrationError('GOOGLE_SERVICE_ACCOUNT_JSON is invalid JSON. Paste the complete downloaded JSON file into Vercel and redeploy.');}if(!account?.client_email||!account?.private_key)throw new IntegrationError('Google credentials are missing client_email or private_key. Use the complete service account JSON file.');
@@ -25,8 +30,9 @@ async function accessToken(){
  if(process.env.GOOGLE_SHEETS_ACCESS_TOKEN)return process.env.GOOGLE_SHEETS_ACCESS_TOKEN;
  throw new IntegrationError('Add GOOGLE_SERVICE_ACCOUNT_JSON to the Vercel deployment environment and redeploy.',503);
 }
-export async function readClickSheet(){
- const token=await accessToken();let range=process.env.GOOGLE_SHEET_RANGE;
+export async function readClickSheet(source?:Awaited<ReturnType<typeof clickSheetSource>>){
+ source=source||await clickSheetSource();const sheetId=source.id;
+ const token=source.oauth?(await connectionToken('google')).token:await accessToken();let range=source.range;
  if(!range){const meta=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties`,{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(15000),cache:'no-store'});await checkSheetResponse(meta);const data=await meta.json();const first=data.sheets?.find((s:{properties:{sheetId:number}})=>s.properties.sheetId===0)||data.sheets?.[0];if(!first)throw new IntegrationError('No spreadsheet tab found.');range="'"+first.properties.title.replaceAll("'","''")+"'!A1:AZ10001";}
  const response=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}`,{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(15000),cache:'no-store'});await checkSheetResponse(response);const data=await response.json();return (data.values||[]) as string[][];
 }
