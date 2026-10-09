@@ -11,11 +11,12 @@ export async function proxy(request:NextRequest){
   values.forEach(({name,value,options})=>response.cookies.set(name,value,options));
  }}});
  const {data:{user}}=await client.auth.getUser();
- if(!user&&['/','/connections'].includes(request.nextUrl.pathname)){
+ if(!user&&['/','/connections','/crm'].includes(request.nextUrl.pathname)){
   const redirect=NextResponse.redirect(new URL('/login',request.url));
   response.cookies.getAll().forEach(cookie=>redirect.cookies.set(cookie));
   return redirect;
  }
  return response;
 }
-export const config={matcher:['/','/login','/connections','/api/integrations/:path*','/api/dashboard','/api/connections','/api/settings','/api/import/sheets','/api/attribution/:path*','/api/conversions/export']};
+export const config={matcher:['/','/login','/connections','/crm','/api/crm/:path*','/api/integrations/:path*','/api/dashboard','/api/connections','/api/settings','/api/import/sheets','/api/attribution/:path*','/api/conversions/export']};
+
