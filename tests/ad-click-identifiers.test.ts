@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {extractBraidIdentifiers} from '../lib/ad-click-identifiers';
 import {conversionCsv} from '../lib/conversion-csv';
+import {parse} from 'csv-parse/sync';
 test('extracts exact braid values from saved matched click URLs',()=>{
  assert.deepEqual(extractBraidIdentifiers('https://gsmweb.site/?gad_source=1&gbraid=0AAAAbC-DeF&gclid=Click_1','Click_1'),{gbraid:'0AAAAbC-DeF',wbraid:''});
  assert.deepEqual(extractBraidIdentifiers('https://gsmweb.site/?wbraid=Wb_2&gclid=Click_1','Click_1'),{gbraid:'',wbraid:'Wb_2'});
@@ -13,10 +14,10 @@ test('rejects conflicting, malformed, missing and ambiguous identifiers',()=>{
 test('exports braid columns only for click-linked conversions without changing timestamps',()=>{
  const base={ready:true,gclid:'Click_1',phone:'+40712345678',conversionTime:'2026-10-09T15:05:24Z',amount:450,paymentId:'crm:payment'};
  const csv=conversionCsv([{...base,gbraid:'Gb_1'},{...base,gclid:'',gbraid:'NotLinked',paymentId:'crm:phone'}],'Verified Payments');
- assert.ok(csv.split('\r\n')[0].endsWith('"GBRAID","WBRAID"'));
+ const [headers,click,phone]=parse(csv);
+ assert.deepEqual(headers.slice(6),['GBRAID','WBRAID','Order ID']);
  assert.ok(csv.includes('"2026-10-09 18:05:24"'));
- assert.ok(csv.split('\r\n')[1].endsWith('"Gb_1",""'));
- assert.ok(csv.split('\r\n')[2].endsWith('"",""'));
+ assert.equal(click[6],'Gb_1');assert.equal(click[7],'');
+ assert.equal(phone[6],'');assert.equal(phone[7],'');
  assert.ok(!csv.includes('NotLinked'));
 });
-
