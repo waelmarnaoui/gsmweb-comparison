@@ -23,8 +23,8 @@ export async function readCrmComparison(calls:{id:string;phone:string;started_at
  const wanted=new Set(calls.map(c=>safePhone(c.phone)).filter(Boolean));
  const customers=(await readRows(remote,'Client','id,name,phone,firstVisit,lastVisit')).filter(c=>wanted.has(safePhone(String(c.phone))));
  const clientIds=customers.map(c=>String(c.id));
- const repairs=await readRows(remote,'Repair','id,clientId,repairCode,phoneModel,entryDate,status','clientId',clientIds);
- const sales=await readRows(remote,'AccessorySale','id,clientId,productName,saleDate','clientId',clientIds);
+ const repairs=await readRows(remote,'Repair','id,clientId,repairCode,phoneModel,entryDate,status,customerPrice,repairCost','clientId',clientIds);
+ const sales=await readRows(remote,'AccessorySale','id,clientId,productName,saleDate,salePrice,productCost,quantity','clientId',clientIds);
  const repairSettlements=await readRows(remote,'RepairSettlement','id,repairId','repairId',repairs.map(r=>String(r.id)));
  const saleSettlements=await readRows(remote,'SaleSettlement','id,saleId','saleId',sales.map(s=>String(s.id)));
  const columns='id,repairSettlementId,saleSettlementId,amount,paidDate,paymentMethod,active';
