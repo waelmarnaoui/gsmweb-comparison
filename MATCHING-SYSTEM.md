@@ -1,5 +1,7 @@
 # Matching system v2
 
+Conversion value/time rules are updated separately in [PROFIT-CONVERSIONS.md](PROFIT-CONVERSIONS.md): verified gross profit, saved website click time, and immutable first paid-customer match time for phone-only rows. No 23:59:59 fallback remains.
+
 This replaces the older incoming-only and raw-click-count matching rules. Apply only `supabase/MATCHING-V2-PROPOSED.sql` to the original call-attribution project after approval. Do not apply older matching migrations afterward. No CRM schema or rows are changed, and no original calls, clicks, matches or drafts are deleted or reassigned.
 
 ## Source completeness
@@ -41,3 +43,4 @@ Timestamp-only website events do not contain verified caller identity. A unique 
 All new views use security-invoker behavior and existing RLS. Restricted functions validate administrator identity, have an empty search path and schema-qualified application references. The active-sheet helper exposes only the selected sheet ID, never encrypted credentials. Privileged keys stay on the server. Missing/failed reads stop decisions rather than returning partial graphs.
 
 Tests use isolated local PostgreSQL instances, not production customers. Coverage includes the missed-call timeline, repeated GCLIDs, foreign numbers, exact boundaries, many-to-one/one-to-many ambiguity, global date-filter competition, preserved historical claims, late-arrival invalidation, settling delays, selected-sheet changes, stale/failed imports, idempotency, audit records and anonymous/non-admin denial. Run the full unit/database suite, TypeScript and production build before deployment.
+
