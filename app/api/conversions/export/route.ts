@@ -1,3 +1,12 @@
-import {requireAdmin,apiError} from '@/lib/server';
-import {CALLS_VISIBLE_FROM_UTC} from '@/lib/call-visibility';
-export async function GET(){try{const {client}=await requireAdmin();const {data,error}=await client.from('ga_conversion_drafts').select('id,match_id,payment_transaction_id,amount,currency,paid_at,gclid,ga_matches!inner(ga_calls!inner(started_at))').gte('ga_matches.ga_calls.started_at',CALLS_VISIBLE_FROM_UTC).eq('status','prepared').limit(10001);if(error)throw error;if((data||[]).length>10000)throw new Error('Export exceeds limit');const name=process.env.GOOGLE_ADS_CONVERSION_NAME;if(!name)throw new Error('Conversion name is not configured');const headers=['Google Click ID','Conversion Name','Conversion Time','Conversion Value','Conversion Currency','Order ID'];const rows=(data||[]).map(d=>{if(!d.gclid||!Number.isFinite(Number(d.amount))||Number(d.amount)<=0||d.currency!=='RON'||!Number.isFinite(Date.parse(d.paid_at)))throw new Error('Invalid conversion draft');return [d.gclid,name,new Date(d.paid_at).toISOString(),String(d.amount),d.currency,d.payment_transaction_id]});const csv=[headers,...rows].map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');return new Response(csv,{headers:{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="gsmweb-conversions-review.csv"','Cache-Control':'no-store'}});}catch(error){return apiError(error)}}
+import {apiError} from '@/lib/server';
+import {conversionDashboard} from '@/lib/conversion-dashboard';
+import {IntegrationError} from '@/lib/integration-error';
+import {formatRomanianTimestamp} from '@/lib/timestamps';
+export async function GET(request:Request){try{
+ const {items,conversionName}=await conversionDashboard(new URL(request.url)),ready=items.filter(c=>c.ready);
+ if(!ready.length)throw new IntegrationError('No verified conversions are ready in the selected date range.');
+ const rows=[['Parameters:TimeZone=Europe/Bucharest'],['Google Click ID','Conversion Name','Conversion Time','Conversion Value','Conversion Currency','Order ID'],...ready.map(c=>[c.gclid,conversionName,formatRomanianTimestamp(c.conversionTime),c.amount.toFixed(2),'RON',c.paymentId])];
+ const csv=rows.map(row=>row.map(v=>'"'+v.replaceAll('"','""')+'"').join(',')).join('\r\n');
+ return new Response(csv,{headers:{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="gsmweb-conversions.csv"','Cache-Control':'no-store'}});
+ }catch(error){return apiError(error)}}
+
