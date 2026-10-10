@@ -8,8 +8,9 @@ import {CALLS_VISIBLE_FROM_UTC} from './call-visibility';
 import {parseTimestamp} from './timestamps';
 import {readCrmComparison} from './crm-reader';
 import {conversionBlocker,type Draft} from './conversion-readiness';
+import {safePhone} from './crm-comparison';
 export function conversionDateRange(url:URL){
- const from=url.searchParams.get('from')||'2026-10-09',to=url.searchParams.get('to')||new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Bucharest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ const from=url.searchParams.get('from')||'2026-09-24',to=url.searchParams.get('to')||new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Bucharest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
  if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to))throw new IntegrationError('Select valid start and end dates.');
  let start:string,end:string;try{start=parseTimestamp(from+' 00:00:00');end=parseTimestamp(to+' 23:59:59.999');}catch{throw new IntegrationError('Select valid calendar dates.');}
  if(start>end)throw new IntegrationError('End date must be on or after start date.');
@@ -19,7 +20,7 @@ export async function conversionDashboard(url:URL,options:{prepare?:boolean;clie
  const client=options.client||(await requireAdmin()).client,range=conversionDateRange(url),name=process.env.GOOGLE_ADS_CONVERSION_NAME||'GSMWeb CRM - All records from GSMWeb CRM';
  async function rows(table:string,columns:string){const all:Record<string,unknown>[]=[];for(let offset=0;offset<10000;offset+=500){const {data,error}=await client.from(table).select(columns).order('id').range(offset,offset+499);if(error)throw new IntegrationError('Conversion records could not be read.',503);all.push(...(data||[]) as unknown as Record<string,unknown>[]);if((data||[]).length<500)return all;}throw new IntegrationError('Too many conversion records. No partial export was generated.',503);}
  const [matches,calls,clicks,drafts]=await Promise.all([rows('ga_matches','id,call_id,click_id'),rows('ga_calls','id,phone,started_at'),rows('ga_clicks','id,gclid,clicked_at,campaign'),rows('ga_conversion_drafts','id,match_id,payment_transaction_id,amount,currency,paid_at,gclid,status')]);
- const matchedCalls=calls.filter(c=>Date.parse(String(c.started_at))>=Date.parse(CALLS_VISIBLE_FROM_UTC)&&matches.some(m=>m.call_id===c.id)) as unknown as {id:string;phone:string;started_at:string}[];
+ const matchedCalls=calls.filter(c=>Date.parse(String(c.started_at))>=Date.parse(CALLS_VISIBLE_FROM_UTC)) as unknown as {id:string;phone:string;started_at:string}[];
  const comparison=matchedCalls.length?await readCrmComparison(matchedCalls):[];
  const crm=await getConnection('supabase_crm'),projectRef=crm?.metadata.project_ref||'';
  const candidates:PaymentCandidate[]=[];
@@ -41,6 +42,16 @@ export async function conversionDashboard(url:URL,options:{prepare?:boolean;clie
    if(seen.has(draft.payment_transaction_id))reason='Duplicate payment attribution';seen.add(draft.payment_transaction_id);
    items.push({id:draft.id,customer:c.customer.name,phone:c.phone,callTime:c.calledAt,repair:c.repairs.map(r=>r.repairCode).join(', '),campaign:String(click.campaign||''),gclid:draft.gclid,paymentId:draft.payment_transaction_id,conversionTime:draft.paid_at,amount:Number(draft.amount),historyTotal:c.recordedTotal,ready:!reason,reason});
   }
+ }
+ // Reserve every existing draft and eligible click-linked payment before phone-only attribution.
+ const reserved=new Set([...drafts.map(d=>String(d.payment_transaction_id)),...expected.map(d=>d.payment_transaction_id)]);
+ const phoneCandidates:PaymentCandidate[]=[];
+ for(const c of comparison){if(!c.customer||!safePhone(c.phone)||matches.some(m=>m.call_id===c.callId))continue;
+  for(const p of c.payments)phoneCandidates.push({matchId:c.callId,callAt:c.calledAt,clientId:c.customer.id,paymentId:p.id,amount:p.amount,paidDate:p.paidDate,visitAt:p.visitAt,gclid:''});
+ }
+ const phoneConversions=projectRef?preparePaymentAttribution(phoneCandidates,projectRef,Date.now(),true).filter(p=>!reserved.has(p.payment_transaction_id)&&Date.parse(p.paid_at)>=Date.parse(range.start)&&Date.parse(p.paid_at)<=Date.parse(range.end)&&Date.now()-Date.parse(p.paid_at)<63*86400000):[];
+ for(const p of phoneConversions){const c=comparison.find(c=>c.callId===p.match_id)!;
+  items.push({id:'phone:'+p.payment_transaction_id,customer:c.customer!.name,phone:safePhone(c.phone)!,callTime:c.calledAt,repair:c.repairs.map(r=>r.repairCode).join(', '),campaign:'Phone-based; Google attribution pending',gclid:'',paymentId:p.payment_transaction_id,conversionTime:p.paid_at,amount:p.amount,historyTotal:c.recordedTotal,ready:true,reason:''});
  }
  return {items,range,conversionName:name};
 }
