@@ -5,12 +5,15 @@ import {createClient} from '@supabase/supabase-js';
 import {service} from './server';
 import {IntegrationError} from './integration-error';
 import {encryptConnection,decryptConnection} from './connection-crypto';
-import {validateOAuthState,validateRequestOrigin} from './connection-validation';
+import {validateOAuthState,validateAppRequestOrigin} from './connection-validation';
 export type ConnectionId='google'|'google_ads'|'supabase_calls'|'supabase_crm';
 export type Credentials={access_token:string;refresh_token:string;expires_at:number;project_key?:string};
 export type Connection={id:ConnectionId;credentials:Credentials;metadata:Record<string,string>;connected_by:string;sealed:string};
 export function appOrigin(){const value=process.env.APP_URL;if(!value)throw new IntegrationError('APP_URL is not configured.',503);const url=new URL(value);if(url.protocol!=='https:'&&url.hostname!=='localhost'&&url.hostname!=='127.0.0.1')throw new IntegrationError('APP_URL must use HTTPS.',503);return url.origin;}
-export function sameOrigin(request:Request){validateRequestOrigin(request.headers.get('origin'),appOrigin());}
+export function sameOrigin(request:Request){validateAppRequestOrigin(request.headers.get('origin'),{
+ APP_URL:process.env.APP_URL,VERCEL:process.env.VERCEL,VERCEL_ENV:process.env.VERCEL_ENV,
+ VERCEL_URL:process.env.VERCEL_URL,VERCEL_PROJECT_PRODUCTION_URL:process.env.VERCEL_PROJECT_PRODUCTION_URL
+});}
 function key(){const value=process.env.CONNECTION_ENCRYPTION_KEY;if(!value||Buffer.from(value,'base64').length!==32)throw new IntegrationError('Connection encryption is not configured.',503);return value;}
 export function configuredProvider(id:ConnectionId){return Boolean(process.env.CONNECTION_ENCRYPTION_KEY&&process.env.SUPABASE_SERVICE_ROLE_KEY&&process.env.APP_URL&&(id==='google_ads'?process.env.GOOGLE_ADS_OAUTH_CLIENT_ID&&process.env.GOOGLE_ADS_OAUTH_CLIENT_SECRET:id==='google'?process.env.GOOGLE_OAUTH_CLIENT_ID&&process.env.GOOGLE_OAUTH_CLIENT_SECRET:process.env.SUPABASE_OAUTH_CLIENT_ID&&process.env.SUPABASE_OAUTH_CLIENT_SECRET));}
 export async function getConnection(id:ConnectionId):Promise<Connection|null>{
