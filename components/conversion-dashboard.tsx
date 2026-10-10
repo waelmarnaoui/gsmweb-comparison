@@ -1,0 +1,22 @@
+'use client';
+import {useEffect,useState} from 'react';
+import {ArrowDownToLine,RefreshCw} from 'lucide-react';
+import type {conversionDashboard} from '@/lib/conversion-dashboard';
+type Data=Awaited<ReturnType<typeof conversionDashboard>>;
+const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Bucharest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+export default function ConversionDashboard(){
+ const [from,setFrom]=useState('2026-10-09'),[to,setTo]=useState(today),[data,setData]=useState<Data|null>(null),[loading,setLoading]=useState(false),[error,setError]=useState(''),[readyOnly,setReadyOnly]=useState(true);
+ const params=new URLSearchParams({from,to}).toString();
+ async function load(){setLoading(true);setData(null);setError('');try{const response=await fetch('/api/conversions?'+params,{method:'POST',cache:'no-store'});if(response.status===401){window.location.assign('/login');return;}const result=await response.json();if(!response.ok)throw new Error(result.error||'Comparison unavailable');setData(result);}catch(e){setError(e instanceof Error?e.message:'Comparison unavailable');}finally{setLoading(false);}}
+ useEffect(()=>{load();},[]);
+ async function download(){setError('');try{const response=await fetch('/api/conversions/export?'+new URLSearchParams({from:data!.range.from,to:data!.range.to}),{cache:'no-store'});if(!response.ok){const result=await response.json();throw new Error(result.error||'Export failed');}const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');link.href=url;link.download='gsmweb-conversions.csv';link.click();URL.revokeObjectURL(url);}catch(e){setError(e instanceof Error?e.message:'Export failed');}}
+ const ready=data?.items.filter(c=>c.ready)||[],shown=data?.items.filter(c=>!readyOnly||c.ready)||[];
+ return <section className="conversion-workspace">
+ <div className="conversion-filters"><label>From<input type="date" min="2026-10-09" value={from} onChange={e=>{setFrom(e.target.value);setData(null);}}/></label><label>To<input type="date" min={from} value={to} onChange={e=>{setTo(e.target.value);setData(null);}}/></label><button className="secondary" disabled={loading||!from||!to||from>to} onClick={load}><RefreshCw size={16}/>{loading?'Loading':'Apply dates'}</button><label className="conversion-toggle"><input type="checkbox" checked={readyOnly} onChange={e=>setReadyOnly(e.target.checked)}/>Ready for CSV only</label><button className="primary" disabled={loading||!ready.length} onClick={download}><ArrowDownToLine size={16}/>Export CSV</button></div>
+ {error&&<p role="alert">{error}</p>}
+ <div className="stats"><div><span>Ready conversions</span><strong>{ready.length}</strong></div><div><span>Converted clients</span><strong>{new Set(ready.map(c=>c.phone)).size}</strong></div><div><span>Verified payments</span><strong>{ready.reduce((n,c)=>n+c.amount,0).toLocaleString('ro-RO')}<small>RON</small></strong></div><div><span>Needs preparation</span><strong>{data?.items.filter(c=>!c.ready).length||0}</strong></div></div>
+ <div className="section-heading"><h2>Converted clients</h2><a href="/crm">CRM payment history</a><a href="/ads">Google Ads connection</a></div>
+ <div className="table-scroll"><table><thead><tr><th>CLIENT / CALL</th><th>REPAIR / CAMPAIGN</th><th>CONVERSION TIME</th><th>RECORDED PAYMENT</th><th>STATUS / GCLID</th></tr></thead><tbody>{shown.map(c=><tr key={c.id}><td><b>{c.customer}</b><small>{c.phone}</small><small>{new Date(c.callTime).toLocaleString('en-GB',{timeZone:'Europe/Bucharest'})}</small></td><td>{c.repair||'No repair'}<small>{c.campaign}</small></td><td>{c.conversionTime?new Date(c.conversionTime).toLocaleString('en-GB',{timeZone:'Europe/Bucharest'}):'Not prepared'}</td><td>{c.ready?`${c.amount.toLocaleString('ro-RO')} RON`:'—'}<small>{c.paymentId}</small></td><td><span className={'badge '+(c.ready?'confirmed':'unmatched')}>{c.ready?'Ready for CSV':'Needs preparation'}</span>{!c.ready&&<small>{c.reason}</small>}<small style={{overflowWrap:'anywhere',maxWidth:240}}>{c.gclid||'No GCLID'}</small></td></tr>)}</tbody></table>{!loading&&!shown.length&&<div className="empty">No verified conversions ready for this date range.</div>}</div>
+ </section>;
+}
+

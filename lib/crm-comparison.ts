@@ -19,7 +19,7 @@ export function compareCrmCall(call:{id:string;phone:string;started_at:string},d
   if(!p.active||seen.has(p.id)||Boolean(p.repairSettlementId)===Boolean(p.saleSettlementId))return false;
   const linked=p.repairSettlementId?repairSettlements.has(p.repairSettlementId):saleSettlements.has(p.saleSettlementId!);
   if(linked)seen.add(p.id);return linked;
- }).map(p=>({id:p.id,amount:cents(p.amount)/100,paidDate:p.paidDate,paymentMethod:p.paymentMethod,kind:p.repairSettlementId?'repair':'sale'}));
+ }).map(p=>{const settlement=p.repairSettlementId?data.repairSettlements.find(s=>s.id===p.repairSettlementId):data.saleSettlements.find(s=>s.id===p.saleSettlementId);const visitAt=p.repairSettlementId?repairs.find(r=>r.id===settlement?.repairId)?.entryDate:sales.find(s=>s.id===settlement?.saleId)?.saleDate;return {id:p.id,amount:cents(p.amount)/100,paidDate:p.paidDate,paymentMethod:p.paymentMethod,kind:p.repairSettlementId?'repair':'sale',visitAt:visitAt||''};});
  return {callId:call.id,phone:call.phone,calledAt:call.started_at,status:'found',customer,repairs,payments,recordedTotal:payments.reduce((sum,p)=>sum+Math.round(p.amount*100),0)/100,candidateCustomers:[]};
 }
 

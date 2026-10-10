@@ -4,6 +4,8 @@ import {Activity,ArrowDownToLine,ArrowUpRight,Check,ChevronRight,Clock,FileCheck
 import {demoCalls,Call} from '@/lib/demo';
 import {browserSupabase,configured} from '@/lib/supabase-browser';
 import type {LucideIcon} from 'lucide-react';
+import ConversionDashboard from '@/components/conversion-dashboard';
+import './conversion.css';
 const navigation: [string,LucideIcon][] = [['Overview',LayoutDashboard],['Call history',Phone],['Conversions',FileCheck2],['Audit log',History],['Settings',Settings]];
 const labels = {candidate:'Match candidate',ambiguous:'Ambiguous',unmatched:'Unmatched',confirmed:'Confirmed'};
 export default function Dashboard(){
@@ -21,6 +23,7 @@ export default function Dashboard(){
  function persist(next:Call[],w:number,log:string[]){setCalls(next);setAudit(log);localStorage.setItem('gsmweb-demo',JSON.stringify({calls:next,window:w,audit:log}));}
  function record(message:string){const log=[`${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})} · ${message}`,...audit];persist(calls,windowSec,log);setNotice(message);}
  async function confirm(){if(!selected||!choice)return;if(live){try{await api('/api/attribution/confirm','POST',{call_id:selected.id,click_id:choice});setSelected(null);await refresh();setNotice('Attribution confirmed.');}catch(e){setNotice(e instanceof Error?e.message:'Confirmation failed');}return;}if(calls.some(c=>c.id!==selected.id&&c.selected===choice)){setNotice('This click is already attributed.');return;}const next=calls.map(c=>c.id===selected.id?{...c,status:'confirmed' as const,selected:choice}:c);persist(next,windowSec,[`Admin confirmed ${selected.id} → ${choice}`,...audit]);setSelected(null);setNotice('Attribution confirmed and added to the audit log.');}
+ if(live&&(view==='Overview'||view==='Conversions'))return <div className="main conversion-main"><header className="conversion-nav"><strong>GSMWeb</strong><nav>{navigation.map(([name,Icon])=><button className={view===name?'primary':'secondary'} key={name} onClick={()=>setView(name)}><Icon size={16}/>{name}</button>)}</nav><a href="/connections">Connections</a></header><main><div className="heading"><div><div className="eyebrow">ATTRIBUTION WORKSPACE</div><h1>Converted clients</h1><p>Google Ads CSV preparation · Europe/Bucharest</p></div></div><ConversionDashboard/><footer><ShieldCheck size={14}/>No automatic Google Ads upload</footer></main></div>;
  const counts=(s:string)=>calls.filter(c=>c.status===s).length;
  const revenue=calls.filter(c=>c.status==='confirmed').reduce((sum,c)=>sum+c.payment,0);
  const shown=calls.filter(c=>(filter==='all'||c.status===filter)&&`${c.phone} ${c.customer} ${c.repair}`.toLowerCase().includes(query.toLowerCase()));
@@ -36,3 +39,4 @@ export default function Dashboard(){
  {selected&&<div className="modal-backdrop" onClick={()=>setSelected(null)}><section className="modal" onClick={e=>e.stopPropagation()}><div className="section-heading"><h2>Review attribution</h2><button className="icon-btn" onClick={()=>setSelected(null)} aria-label="Close review"><X/></button></div><h3>{selected.customer}</h3><p>{selected.phone} · {selected.time} · {selected.duration}</p><div className="payment-info"><b>{selected.payment} RON recorded</b><small>{selected.repair}</small></div><h4>Website match candidates</h4>{selected.clicks.filter(c=>c.delay<=windowSec||selected.selected===c.id).map(c=><label className="candidate-option" key={c.id}><input type="radio" name="candidate" checked={choice===c.id} onChange={()=>setChoice(c.id)} disabled={selected.status==='confirmed'}/><div><b>{c.campaign}</b><small>{c.id} · {c.time} · {c.delay}s before call</small></div></label>)}{!selected.clicks.some(c=>c.delay<=windowSec)&&<p>No website clicks within the current window.</p>}<div className="modal-actions"><button className="secondary" onClick={()=>setSelected(null)}>Close</button>{selected.status!=='confirmed'&&<button className="primary" disabled={!choice} onClick={confirm}><Check size={16}/>Confirm match</button>}{selected.status==='confirmed'&&<span className="badge confirmed"><Check size={14}/>{selected.confirmationMethod==='automatic'?'Automatically matched':'Manually confirmed'}</span>}</div></section></div>}
  </div>;
 }
+
