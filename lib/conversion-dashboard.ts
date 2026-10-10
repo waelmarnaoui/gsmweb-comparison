@@ -14,6 +14,7 @@ import {matchingHealth,matchReviews,MATCHING_PENDING} from './matching-state';
 import {clickSheetSource} from './sheets';
 import {readClickSyncState} from './sync-click-sheet';
 import {clickSyncReason} from './click-sync-state';
+import {extractBraidIdentifiers} from './ad-click-identifiers';
 export function conversionDateRange(url:URL){
  const from=url.searchParams.get('from')||'2026-09-24',to=url.searchParams.get('to')||new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Bucharest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
  if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to))throw new IntegrationError('Select valid start and end dates.');
@@ -24,7 +25,7 @@ export function conversionDateRange(url:URL){
 export async function conversionDashboard(url:URL,options:{prepare?:boolean;client?:SupabaseClient}={}){
  const client=options.client||(await requireAdmin()).client,range=conversionDateRange(url),name=process.env.GOOGLE_ADS_CONVERSION_NAME||'GSMWeb CRM - All records from GSMWeb CRM';
  async function rows(table:string,columns:string){const all:Record<string,unknown>[]=[];for(let offset=0;offset<10000;offset+=500){const {data,error}=await client.from(table).select(columns).order('id').range(offset,offset+499);if(error)throw new IntegrationError('Conversion records could not be read.',503);all.push(...(data||[]) as unknown as Record<string,unknown>[]);if((data||[]).length<500)return all;}throw new IntegrationError('Too many conversion records. No partial export was generated.',503);}
- const [matches,calls,clicks,drafts]=await Promise.all([rows('ga_matches','id,call_id,click_id'),rows('ga_calls','id,phone,started_at,direction'),rows('ga_clicks','id,gclid,clicked_at,campaign'),rows('ga_conversion_drafts','id,match_id,payment_transaction_id,amount,currency,paid_at,gclid,status')]);
+ const [matches,calls,clicks,drafts]=await Promise.all([rows('ga_matches','id,call_id,click_id'),rows('ga_calls','id,phone,started_at,direction'),rows('ga_clicks','id,gclid,clicked_at,campaign,page_url'),rows('ga_conversion_drafts','id,match_id,payment_transaction_id,amount,currency,paid_at,gclid,status')]);
  const health=await matchingHealth(client),reviews=health.configured?await matchReviews(client):[];
  const source=health.configured?await clickSheetSource():null;
  const sourceReason=source?clickSyncReason(await readClickSyncState(client,source.id),source.id):MATCHING_PENDING;
@@ -64,5 +65,11 @@ export async function conversionDashboard(url:URL,options:{prepare?:boolean;clie
   items.push({id:'phone:'+p.payment_transaction_id,customer:c.customer!.name,phone:safePhone(c.phone)!,callTime:c.calledAt,repair:c.repairs.map(r=>r.repairCode).join(', '),campaign:'Phone-based; Google attribution pending',gclid:'',paymentId:p.payment_transaction_id,conversionTime:p.paid_at,amount:p.amount,historyTotal:c.recordedTotal,ready:true,reason:''});
  }
  if(sourceReason)for(const item of items){item.ready=false;item.reason=sourceReason;}
- return {items,range,conversionName:name};
+ const enriched=items.map(item=>{
+  const draft=drafts.find(d=>d.id===item.id),match=matches.find(m=>m.id===(draft?.match_id||item.id));
+  const click=match?clicks.find(k=>k.id===match.click_id):undefined;
+  return {...item,...extractBraidIdentifiers(click?.page_url,item.gclid)};
+ });
+ return {items:enriched,range,conversionName:name};
 }
+
