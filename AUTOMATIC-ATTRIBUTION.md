@@ -1,5 +1,7 @@
 # Visible calls and automatic attribution
 
+> Superseded by [MATCHING-SYSTEM.md](MATCHING-SYSTEM.md). The instructions below describe the original implementation, not v2. Do not apply the older matching migrations after MATCHING-V2-PROPOSED.sql.
+
 Calls before 9 October 2026 00:00 Europe/Bucharest are hidden from live call history, dashboard statistics, collector count and conversion exports. The inclusive UTC boundary is 2026-10-08T21:00:00Z. Existing stored call records are retained. The phone's recording/upload behavior is unchanged.
 
 Review and approve supabase/AUTO-MATCH-PROPOSED.sql before installing it in the original attribution project. It adds confirmation_method to the app-owned ga_matches table and creates an administrator-only matching RPC. It does not change CRM tables. Until installed, the app shows automatic matching as pending, never falsely reports a candidate as automatically confirmed.

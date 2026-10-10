@@ -1,5 +1,5 @@
 import 'server-only';
-import {createSign,createHash} from 'node:crypto';
+import {createSign} from 'node:crypto';
 import {IntegrationError} from './integration-error';
 import {configuredProvider,getConnection,connectionToken} from './connections';
 async function checkSheetResponse(response:Response){
@@ -36,4 +36,3 @@ export async function readClickSheet(source?:Awaited<ReturnType<typeof clickShee
  if(!range){const meta=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties`,{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(15000),cache:'no-store'});await checkSheetResponse(meta);const data=await meta.json();const first=data.sheets?.find((s:{properties:{sheetId:number}})=>s.properties.sheetId===0)||data.sheets?.[0];if(!first)throw new IntegrationError('No spreadsheet tab found.');range="'"+first.properties.title.replaceAll("'","''")+"'!A1:AZ10001";}
  const response=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}`,{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(15000),cache:'no-store'});await checkSheetResponse(response);const data=await response.json();return (data.values||[]) as string[][];
 }
-export function eventKey(sheet:string,values:Record<string,string>){return sheet+':'+(values.event_id||createHash('sha256').update(JSON.stringify(values)).digest('hex'));}
