@@ -1,7 +1,7 @@
 export function normalizeRomanianPhone(input: string): string {
   const value = input.replace(/[\s().-]/g, '');
-  const normalized = value.startsWith('0040') ? '+' + value.slice(2) : /^0\d{9}$/.test(value) ? '+40' + value.slice(1) : /^40\d{9}$/.test(value) ? '+' + value : value;
-  if (!/^\+40\d{9}$/.test(normalized)) throw new Error('Invalid Romanian phone number');
+  const normalized = value.startsWith('00') ? '+' + value.slice(2) : /^0\d{9}$/.test(value) ? '+40' + value.slice(1) : /^40\d{9}$/.test(value) ? '+' + value : value;
+  if (!/^\+[1-9]\d{7,14}$/.test(normalized)) throw new Error('Use an international phone number with a country code');
   return normalized;
 }
 export function candidates<T extends { timestamp: string }>(callTime: string, clicks: T[], windowSeconds = 120): T[] {
@@ -10,3 +10,4 @@ export function candidates<T extends { timestamp: string }>(callTime: string, cl
   if (!Number.isFinite(time)) throw new Error('Invalid call timestamp');
   return clicks.filter(click => { const delay = (time - Date.parse(click.timestamp)) / 1000; return delay >= 0 && delay <= windowSeconds; });
 }
+
