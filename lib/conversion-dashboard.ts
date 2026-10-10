@@ -9,6 +9,7 @@ import {parseTimestamp} from './timestamps';
 import {readCrmComparison} from './crm-reader';
 import {conversionBlocker,type Draft} from './conversion-readiness';
 import {safePhone} from './crm-comparison';
+import {firstInteractions,type InteractionCall} from './first-interaction';
 export function conversionDateRange(url:URL){
  const from=url.searchParams.get('from')||'2026-09-24',to=url.searchParams.get('to')||new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Bucharest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
  if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to))throw new IntegrationError('Select valid start and end dates.');
@@ -19,8 +20,8 @@ export function conversionDateRange(url:URL){
 export async function conversionDashboard(url:URL,options:{prepare?:boolean;client?:SupabaseClient}={}){
  const client=options.client||(await requireAdmin()).client,range=conversionDateRange(url),name=process.env.GOOGLE_ADS_CONVERSION_NAME||'GSMWeb CRM - All records from GSMWeb CRM';
  async function rows(table:string,columns:string){const all:Record<string,unknown>[]=[];for(let offset=0;offset<10000;offset+=500){const {data,error}=await client.from(table).select(columns).order('id').range(offset,offset+499);if(error)throw new IntegrationError('Conversion records could not be read.',503);all.push(...(data||[]) as unknown as Record<string,unknown>[]);if((data||[]).length<500)return all;}throw new IntegrationError('Too many conversion records. No partial export was generated.',503);}
- const [matches,calls,clicks,drafts]=await Promise.all([rows('ga_matches','id,call_id,click_id'),rows('ga_calls','id,phone,started_at'),rows('ga_clicks','id,gclid,clicked_at,campaign'),rows('ga_conversion_drafts','id,match_id,payment_transaction_id,amount,currency,paid_at,gclid,status')]);
- const matchedCalls=calls.filter(c=>Date.parse(String(c.started_at))>=Date.parse(CALLS_VISIBLE_FROM_UTC)) as unknown as {id:string;phone:string;started_at:string}[];
+ const [matches,calls,clicks,drafts]=await Promise.all([rows('ga_matches','id,call_id,click_id'),rows('ga_calls','id,phone,started_at,direction'),rows('ga_clicks','id,gclid,clicked_at,campaign'),rows('ga_conversion_drafts','id,match_id,payment_transaction_id,amount,currency,paid_at,gclid,status')]);
+ const matchedCalls=firstInteractions(calls as unknown as InteractionCall[]).filter(g=>g.eligible).map(g=>g.primary);
  const comparison=matchedCalls.length?await readCrmComparison(matchedCalls):[];
  const crm=await getConnection('supabase_crm'),projectRef=crm?.metadata.project_ref||'';
  const candidates:PaymentCandidate[]=[];
@@ -55,4 +56,3 @@ export async function conversionDashboard(url:URL,options:{prepare?:boolean;clie
  }
  return {items,range,conversionName:name};
 }
-
