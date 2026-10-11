@@ -15,6 +15,8 @@ import {readClickSyncState} from './sync-click-sheet';
 import {clickSyncReason} from './click-sync-state';
 import {extractBraidIdentifiers} from './ad-click-identifiers';
 import {conversionObservations} from './conversion-observations';
+import {readClientConsents} from './consent-store';
+import {consentAllowsUserData} from './client-consent';
 type ConversionItem={id:string;customer:string;phone:string;callTime:string;repair:string;campaign:string;gclid:string;paymentId:string;conversionTime:string;amount:number;paymentAmount:number;chargedAmount:number|null;allocatedCost:number|null;historyTotal:number;ready:boolean;reason:string;timeBasis:'website_click'|'first_paid_match'};
 export function conversionDateRange(url:URL){
  const from=url.searchParams.get('from')||'2026-09-24',to=url.searchParams.get('to')||new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Bucharest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -85,11 +87,15 @@ export async function conversionDashboard(url:URL,options:{prepare?:boolean;clie
   items.push({id:'phone:'+p.payment_transaction_id,customer:c.customer!.name,phone:safePhone(c.phone)!,callTime:c.calledAt,repair:c.repairs.map(r=>r.repairCode).join(', '),campaign:'Phone-based; Google attribution pending',gclid:'',paymentId:p.payment_transaction_id,conversionTime:time,amount:payment.profit??0,paymentAmount:payment.amount,chargedAmount:payment.chargedAmount,allocatedCost:payment.allocatedCost,timeBasis:'first_paid_match',historyTotal:c.recordedTotal,ready:!reason,reason});
  }
  if(sourceReason)for(const item of items){item.ready=false;item.reason=sourceReason;}
+ const consentState=await readClientConsents(client,projectRef,comparison.flatMap(c=>c.customer?[c.customer.id]:[]));
  const enriched=items.map(item=>{
   const draft=drafts.find(d=>d.id===item.id),match=matches.find(m=>m.id===(draft?.match_id||item.id));
   const click=match?clicks.find(k=>k.id===match.click_id):undefined;
-  return {...item,...extractBraidIdentifiers(click?.page_url,item.gclid)};
+  const customer=comparison.find(c=>safePhone(c.phone)===safePhone(item.phone)&&c.customer)?.customer;
+  const consent=customer?consentState.latest.get(customer.id):undefined;
+  const userDataAllowed=consentAllowsUserData(consent,item.phone);
+  const consentReason=!consentState.configured?'Consent storage needs database setup':!userDataAllowed?'Advertising measurement consent is not granted':'';
+  return {...item,...extractBraidIdentifiers(click?.page_url,item.gclid),callId:comparison.find(c=>c.customer?.id===customer?.id)?.callId||'',consent:consent||null,financialReady:item.ready,userDataAllowed,ready:item.ready&&userDataAllowed,reason:item.reason||consentReason};
  });
  return {items:enriched,range,conversionName:name,notice:observations.configured?'':'Phone-only conversions need first-match timestamp storage. Website-click conversions remain available.'};
 }
-

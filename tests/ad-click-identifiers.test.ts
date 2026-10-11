@@ -12,7 +12,7 @@ test('rejects conflicting, malformed, missing and ambiguous identifiers',()=>{
  assert.deepEqual(extractBraidIdentifiers('https://gsmweb.site/?gbraid=abc',''),{gbraid:'',wbraid:''});
 });
 test('exports braid columns only for click-linked conversions without changing timestamps',()=>{
- const base={ready:true,gclid:'Click_1',phone:'+40712345678',conversionTime:'2026-10-09T15:05:24Z',amount:450,paymentId:'crm:payment'};
+ const base={ready:true,gclid:'Click_1',phone:'+40712345678',conversionTime:'2026-10-09T15:05:24Z',amount:450,paymentId:'crm:payment',userDataAllowed:true};
  const csv=conversionCsv([{...base,gbraid:'Gb_1'},{...base,gclid:'',gbraid:'NotLinked',paymentId:'crm:phone'}],'Verified Payments');
  const [headers,click,phone]=parse(csv);
  assert.deepEqual(headers.slice(6),['GBRAID','WBRAID','Order ID']);

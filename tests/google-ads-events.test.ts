@@ -1,0 +1,28 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {validationPayload} from '../lib/google-ads-events';
+import {CONSENT_SCRIPT_VERSION,type ClientConsent} from '../lib/client-consent';
+const now=Date.parse('2026-10-11T12:00:00Z');
+const consent:ClientConsent={id:'1',crm_project_ref:'project',client_id:'client',phone:'+40712345678',ad_user_data:'granted',ad_personalization:'not_asked',obtained_at:'2026-10-11T10:00:00Z',recorded_at:'2026-10-11T11:00:00Z',recorded_by:'staff',script_version:CONSENT_SCRIPT_VERSION};
+const row={ready:true,paymentId:'project:payment',conversionTime:'2026-10-10T09:00:00+03:00',amount:205.01,phone:consent.phone,gclid:'click',consent,timeBasis:'website_click'};
+test('API validation preserves profit, timestamp, destination and hashes phone',()=>{
+ const payload=validationPayload([row],now);
+ assert.equal(payload.validateOnly,true);
+ assert.equal(payload.destinations[0].productDestinationId,'7835048106');
+ assert.equal(payload.events[0].conversionValue,205.01);
+ assert.equal(payload.events[0].eventTimestamp,'2026-10-10T06:00:00.000Z');
+ assert.match(payload.events[0].userData.userIdentifiers[0].phoneNumber,/^[a-f0-9]{64}$/);
+ assert.equal(JSON.stringify(payload).includes(consent.phone),false);
+ assert.equal(payload.events[0].consent.adPersonalization,'CONSENT_DENIED');
+});
+test('validation excludes blocked rows and rejects duplicates and unconfirmed consent',()=>{
+ assert.throws(()=>validationPayload([{...row,ready:false}],now));
+ assert.throws(()=>validationPayload([row,row],now));
+ assert.throws(()=>validationPayload([{...row,consent:null}],now));
+ assert.throws(()=>validationPayload([{...row,consent:{...consent,ad_user_data:'refused'}}],now));
+ assert.throws(()=>validationPayload([{...row,amount:-1}],now));
+ assert.throws(()=>validationPayload([{...row,conversionTime:'2027-01-01T00:00:00Z'}],now));
+ const payload=validationPayload([{...row,gclid:'',timeBasis:'first_paid_match'}],now);
+ assert.equal(payload.events[0].eventSource,'PHONE');
+ assert.equal(payload.events[0].adIdentifiers,undefined);
+});

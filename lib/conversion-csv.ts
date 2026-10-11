@@ -4,7 +4,7 @@ import {parse} from 'csv-parse/sync';
 import {formatRomanianTimestamp} from './timestamps';
 import {safePhone} from './crm-comparison';
 
-type ExportRow={ready:boolean;gclid:string;phone:string;conversionTime:string;amount:number;paymentId:string;gbraid?:string;wbraid?:string;paymentAmount?:number;chargedAmount?:number|null;allocatedCost?:number|null;timeBasis?:string};
+type ExportRow={ready:boolean;gclid:string;phone:string;conversionTime:string;amount:number;paymentId:string;userDataAllowed?:boolean;gbraid?:string;wbraid?:string;paymentAmount?:number;chargedAmount?:number|null;allocatedCost?:number|null;timeBasis?:string};
 // Keep this schema stable after configuring the Data Manager field mapping.
 export const GOOGLE_ADS_CSV_HEADERS=['Google Click ID','Phone Number','Conversion Name','Conversion Time','Conversion Value','Conversion Currency','GBRAID','WBRAID','Order ID'] as const;
 export function googleAdsCsv(records:string[][]){
@@ -20,7 +20,7 @@ export function conversionCsv(items:ExportRow[],name:string){
  const rows:string[][]=[];
  for(const c of items){
   if(!c.ready)continue;
-  const phone=safePhone(c.phone);
+  const phone=c.userDataAllowed===true?safePhone(c.phone):null;
   if(!name.trim()||!c.paymentId||seen.has(c.paymentId)||(!c.gclid&&!phone)||!Number.isFinite(c.amount)||c.amount<=0)throw new Error('Invalid or duplicate conversion export');
   seen.add(c.paymentId);
   const braid=(value:string|undefined)=>c.gclid&&value&&/^[A-Za-z0-9_-]{1,512}$/.test(value)?value:'';
