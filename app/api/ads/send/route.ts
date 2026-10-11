@@ -6,6 +6,7 @@ import {parseManifest} from '@/lib/ads-review';
 import {uploadReviewed} from '@/lib/ads-upload-flow';
 import {adsRequest} from '@/lib/ads-provider';
 import {IntegrationError} from '@/lib/integration-error';
+import {recordAdsValidation} from '@/lib/ads-connection';
 export const maxDuration=60;
 export async function POST(request:Request){
  try{
@@ -13,7 +14,7 @@ export async function POST(request:Request){
   const manifest=parseManifest(await request.json()),{token}=await connectionToken('google_ads');
   const result=await uploadReviewed(manifest,{
    read:async()=>{const dashboard=await conversionDashboard(new URL(request.url),{client}),history=await uploadHistory(client);if(!history.configured)throw new IntegrationError('Install the approved Google upload tracking setup first.',503);const locked=new Set(history.records.map(record=>record.payment_id));return dashboard.items.map(row=>({...row,ready:row.ready&&!locked.has(row.paymentId)}));},
-   validate:async payload=>{const result=await adsRequest(token,'events:ingest',payload);if(result.fieldWarnings?.length)throw new IntegrationError('Google returned validation warnings. Nothing was uploaded.',502);},
+   validate:async payload=>{const result=await adsRequest(token,'events:ingest',payload);if(result.fieldWarnings?.length)throw new IntegrationError('Google returned validation warnings. Nothing was uploaded.',502);await recordAdsValidation(token);},
    claim:(rows,items)=>claimUpload(user.id,rows,items),
    submit:async payload=>{const result=await adsRequest(token,'events:ingest',payload);if(typeof result.requestId!=='string'||!result.requestId||result.requestId.length>512)throw new Error('Google returned no receipt.');return {requestId:result.requestId,warnings:Boolean(result.fieldWarnings?.length)};},
    record:recordUpload
