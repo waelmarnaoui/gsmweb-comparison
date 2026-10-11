@@ -32,6 +32,7 @@ export async function matchReviews(client:SupabaseClient){
  throw new IntegrationError('Saved attribution limit reached. No partial verification was returned.',503);
 }
 export function optionReason(options:MatchOption[],now=Date.now()){
+ if(options.some(option=>option.settled_at==='infinity'))return 'Approximate WhatsApp minute cannot identify an unambiguous website click';
  if(!options.length)return 'No website click before this first call within the matching window';
  if(options.some(o=>o.candidate_count!==1))return 'More than one website source fits this call';
  if(options.some(o=>o.competing_calls!==1))return 'Website source fits more than one caller';

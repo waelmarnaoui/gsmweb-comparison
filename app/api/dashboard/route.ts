@@ -36,7 +36,7 @@ export async function GET(request:Request){try{
   const status=match?(health.configured&&review?.reason===''?'confirmed':'ambiguous'):conflict?'ambiguous':candidate.length?'candidate':'unmatched';
   const attached=match?[{click_id:match.click_id,delay_seconds:(Date.parse(c.started_at)-Date.parse(clicks.get(match.click_id)?.clicked_at||c.started_at))/1000,related_clicks:candidate.find(o=>o.source_identity==='gclid:'+clicks.get(match.click_id)?.gclid)?.related_clicks||1}]:candidate;
   return {id:c.id,phone:g.phone,time:format(c.started_at),timestamp:c.started_at,direction:c.direction,
-   followUpCount:g.followUps.length,duration:`${Math.floor(c.duration_seconds/60)}m ${c.duration_seconds%60}s`,
+   followUpCount:g.followUps.length,duration:c.external_id?.startsWith('whatsapp-manual:')?'WhatsApp · manual':`${Math.floor(c.duration_seconds/60)}m ${c.duration_seconds%60}s`,
    customer:'CRM customer not linked',repair:'Payment relationship not verified',payment:0,paymentVerified:false,
    status,matchingReason:reason,selected:match?.click_id,confirmationMethod:match?.confirmation_method||'manual',
    canConfirm:health.configured&&!match&&!conflict&&candidate.length===1&&Date.parse(candidate[0].settled_at)<=Date.now(),
