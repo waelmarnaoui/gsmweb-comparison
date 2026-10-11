@@ -3,13 +3,17 @@ import type {SupabaseClient} from '@supabase/supabase-js';
 import {crmClient} from './connections';
 import {IntegrationError} from './integration-error';
 import {compareCrmCall,safePhone,type CrmData} from './crm-comparison';
+import {isReviewDay,reviewDay} from './review-day';
+import {repairProfit,crmVisitTime} from './repair-attribution';
+import type {CrmRepair} from './crm-comparison';
 export const CRM_TABLES=['Client','Repair','AccessorySale','PaymentTransaction','RepairSettlement','SaleSettlement'];
-async function readRows(client:SupabaseClient,table:string,columns:string,field?:string,ids?:string[]){
+async function readRows(client:SupabaseClient,table:string,columns:string,field?:string,ids?:string[],dateRange?:{field:string;start:string;end:string}){
  const result:Record<string,unknown>[]=[];
  for(const batch of field?Array.from({length:Math.ceil((ids?.length||0)/100)},(_,i)=>ids!.slice(i*100,i*100+100)):[null]){
   for(let offset=0;offset<20000;offset+=500){
    let query=client.from(table).select(columns).order('id').range(offset,offset+499);
    if(field&&batch)query=query.in(field,batch);
+   if(dateRange)query=query.gte(dateRange.field,dateRange.start).lte(dateRange.field,dateRange.end);
    const {data,error}=await query;if(error)throw new IntegrationError(`Cannot read CRM ${table}. Check project selection, schema and server API access.`,503);
    result.push(...(data||[]) as unknown as Record<string,unknown>[]);
    if((data||[]).length<500)break;
@@ -32,4 +36,9 @@ export async function readCrmComparison(calls:{id:string;phone:string;started_at
  const data={customers,repairs,sales,repairSettlements,saleSettlements,payments} as unknown as CrmData;
  return calls.map(c=>compareCrmCall(c,data));
 }
-
+export async function readCrmDay(day:string){
+ const remote=await crmClient();if(!remote)throw new IntegrationError('Choose the separate CRM database in Connections first.',503);
+ const range=reviewDay(day),repairs=(await readRows(remote,'Repair','id,clientId,repairCode,phoneModel,entryDate,status,customerPrice,repairCost',undefined,undefined,{field:'entryDate',start:range.start,end:range.end})).filter(r=>{const time=crmVisitTime(String(r.entryDate));return Number.isFinite(time)&&isReviewDay(new Date(time).toISOString(),day);});
+ const customers=await readRows(remote,'Client','id,name,phone','id',[...new Set(repairs.map(r=>String(r.clientId)))]);
+ return repairs.map(row=>{const repair=row as unknown as CrmRepair,customer=customers.find(c=>c.id===repair.clientId);return {id:repair.id,customer:String(customer?.name||'Unknown client'),phone:String(customer?.phone||''),repair:repair.repairCode,time:new Date(crmVisitTime(repair.entryDate)).toISOString(),status:repair.status,price:repair.customerPrice??null,cost:repair.repairCost??null,profit:repairProfit(repair)};});
+}

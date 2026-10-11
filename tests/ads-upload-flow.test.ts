@@ -17,6 +17,13 @@ test('rejected validation does not reserve or upload',async()=>{
  const {ports,calls}=setup();ports.validate=async()=>{throw new Error('rejected');};
  await assert.rejects(uploadReviewed(reviewedManifest([row]),ports),/rejected/);assert.deepEqual(calls,['read']);
 });
+test('negative repair profit is preserved and a provider rejection cannot reserve or send',async()=>{
+ const repairRow={...row,paymentId:'dmjunqbncyrinykbbmfk:repair:r1',amount:-50,timeBasis:'first_crm_match'};
+ const {ports,calls}=setup();ports.read=async()=>[repairRow];
+ ports.validate=async payload=>{assert.equal(payload.events[0].conversionValue,-50);assert.equal(payload.validateOnly,true);throw new Error('Provider rejected signed value');};
+ await assert.rejects(uploadReviewed(reviewedManifest([repairRow]),ports),/Provider rejected/);
+ assert.deepEqual(calls,[]);
+});
 test('changed profit or withdrawn consent during validation blocks upload',async()=>{
  for(const change of [{...row,amount:99},{...row,ready:false}]){const {ports,calls}=setup();let n=0;ports.read=async()=>++n===1?[row]:[change];await assert.rejects(uploadReviewed(reviewedManifest([row]),ports),/changed/);assert.deepEqual(calls,['validate']);}
 });

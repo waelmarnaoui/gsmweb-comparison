@@ -20,7 +20,9 @@ test('validation excludes blocked rows and rejects duplicates and unconfirmed co
  assert.throws(()=>validationPayload([row,row],now));
  assert.throws(()=>validationPayload([{...row,consent:null}],now));
  assert.throws(()=>validationPayload([{...row,consent:{...consent,ad_user_data:'refused'}}],now));
- assert.throws(()=>validationPayload([{...row,amount:-1}],now));
+ assert.equal(validationPayload([{...row,amount:-1}],now).events[0].conversionValue,-1);
+ assert.equal(validationPayload([{...row,amount:0}],now).events[0].conversionValue,0);
+ assert.throws(()=>validationPayload([{...row,amount:NaN}],now));
  assert.throws(()=>validationPayload([{...row,conversionTime:'2027-01-01T00:00:00Z'}],now));
  const payload=validationPayload([{...row,gclid:'',timeBasis:'first_paid_match'}],now);
  assert.equal(payload.events[0].eventSource,'PHONE');

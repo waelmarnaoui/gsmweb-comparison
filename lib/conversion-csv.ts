@@ -21,7 +21,7 @@ export function conversionCsv(items:ExportRow[],name:string){
  for(const c of items){
   if(!c.ready)continue;
   const phone=c.userDataAllowed===true?safePhone(c.phone):null;
-  if(!name.trim()||!c.paymentId||seen.has(c.paymentId)||(!c.gclid&&!phone)||!Number.isFinite(c.amount)||c.amount<=0)throw new Error('Invalid or duplicate conversion export');
+  if(!name.trim()||!c.paymentId||seen.has(c.paymentId)||(!c.gclid&&!phone)||!Number.isFinite(c.amount))throw new Error('Invalid or duplicate conversion export');
   seen.add(c.paymentId);
   const braid=(value:string|undefined)=>c.gclid&&value&&/^[A-Za-z0-9_-]{1,512}$/.test(value)?value:'';
   rows.push([c.gclid,phone?createHash('sha256').update(phone).digest('hex'):'',name,formatRomanianTimestamp(c.conversionTime),c.amount.toFixed(2),'RON',braid(c.gbraid),braid(c.wbraid),c.paymentId]);
