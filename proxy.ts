@@ -18,4 +18,4 @@ export async function proxy(request:NextRequest){
  }
  return response;
 }
-export const config={matcher:['/','/login','/connections','/crm','/ads','/review','/consent','/api/ads/:path*','/api/consent','/api/crm/:path*','/api/integrations/:path*','/api/dashboard','/api/connections','/api/settings','/api/import/sheets','/api/attribution/:path*','/api/conversions/:path*']};
+export const config={matcher:['/','/login','/connections','/crm','/ads','/review','/consent','/api/review/:path*','/api/ads/:path*','/api/consent','/api/crm/:path*','/api/integrations/:path*','/api/dashboard','/api/connections','/api/settings','/api/import/sheets','/api/attribution/:path*','/api/conversions/:path*']};

@@ -6,6 +6,7 @@ import {IntegrationError} from '@/lib/integration-error';
 import {parseManifest,selectReviewed} from '@/lib/ads-review';
 import {uploadHistory} from '@/lib/ads-ledger';
 import {adsRequest} from '@/lib/ads-provider';
+import {recordAdsValidation} from '@/lib/ads-connection';
 
 export async function POST(request:Request){
  try{
@@ -18,6 +19,7 @@ export async function POST(request:Request){
   const {token}=await connectionToken('google_ads');
   const result=await adsRequest(token,'events:ingest',payload);
   if(result.fieldWarnings?.length)throw new IntegrationError('Google returned validation warnings. Upload remains disabled pending review.',502);
+  await recordAdsValidation(token);
   return Response.json({validated:true,count:payload.events.length,message:'Google accepted validation. No conversions were uploaded.'},{headers:{'Cache-Control':'no-store'}});
  }catch(error){return apiError(error);}
 }

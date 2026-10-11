@@ -11,7 +11,7 @@ export function validationPayload(rows:Row[],now=Date.now()){
  const seen=new Set<string>();
  const events=eligible.map(row=>{
   const phone=safePhone(row.phone),time=Date.parse(row.conversionTime);
-  if(!phone||!consentAllowsUserData(row.consent||undefined,phone,now)||!row.paymentId||seen.has(row.paymentId)||!Number.isFinite(time)||time>now||!Number.isFinite(row.amount)||row.amount<=0)throw new Error('Conversion validation failed. Refresh the review.');
+  if(!phone||!consentAllowsUserData(row.consent||undefined,phone,now)||!row.paymentId||seen.has(row.paymentId)||!Number.isFinite(time)||time>now||!Number.isFinite(row.amount))throw new Error('Conversion validation failed. Refresh the review.');
   seen.add(row.paymentId);
   const adIdentifiers:Record<string,string>={};
   for(const key of ['gclid','gbraid','wbraid'] as const){const value=row[key];if(value){if(!/^[A-Za-z0-9_-]{1,512}$/.test(value))throw new Error('Invalid advertising identifier.');adIdentifiers[key]=value;}}

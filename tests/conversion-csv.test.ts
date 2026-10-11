@@ -4,6 +4,10 @@ import {createHash} from 'node:crypto';
 import {parse} from 'csv-parse/sync';
 import {conversionCsv,googleAdsCsv,GOOGLE_ADS_CSV_HEADERS} from '../lib/conversion-csv';
 const c={ready:true,gclid:'click',phone:'0733919087',conversionTime:'2026-09-24T15:05:24Z',amount:120,paymentId:'crm:p',userDataAllowed:true};
+test('repair export preserves zero and negative profit without clamping',()=>{
+ const rows=parse(conversionCsv([{...c,amount:-50},{...c,paymentId:'crm:r2',amount:0}],'CRM repairs'));
+ assert.equal(rows[1][4],'-50.00');assert.equal(rows[2][4],'0.00');
+});
 test('combined file supports clicks and phone-only rows with exact Romanian timestamp',()=>{
  const csv=conversionCsv([c,{...c,gclid:'',paymentId:'crm:p2'}],'GSMWeb CRM');
  assert.ok(csv.startsWith('"Google Click ID","Phone Number"'));
