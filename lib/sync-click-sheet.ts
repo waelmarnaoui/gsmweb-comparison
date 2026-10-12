@@ -25,8 +25,16 @@ export async function syncClickSheet(client:SupabaseClient,force=false){
   }
   const rows=clickImportRows(source.id,values,existing);
   for(let i=0;i<rows.length;i+=200){
-   const {data,error}=await client.from('ga_clicks').upsert(rows.slice(i,i+200),{onConflict:'source_key',ignoreDuplicates:true}).select('id');
+   const batch=rows.slice(i,i+200);
+   const {data,error}=await client.from('ga_clicks').upsert(batch.map(({channel,...row})=>row),{onConflict:'source_key',ignoreDuplicates:true}).select('id');
    if(error)throw new IntegrationError('Website click import failed. Partial imports will be retried safely.',503);inserted+=data?.length||0;
+   const typed=batch.filter(row=>row.channel);
+   if(typed.length){
+    const saved=await client.from('ga_clicks').select('id,source_key').in('source_key',typed.map(row=>row.source_key));
+    if(saved.error||saved.data?.length!==typed.length)throw new IntegrationError('Website click channels could not be verified. Attribution is paused.',503);
+    const {error}=await client.rpc('ga_record_click_channels',{p_items:saved.data.map(click=>({click_id:click.id,channel:typed.find(row=>row.source_key===click.source_key)!.channel}))});
+    if(error)throw new IntegrationError('Install the approved WhatsApp setup to import labelled call/WhatsApp clicks. Attribution is paused.',503);
+   }
   }
   const {error}=await client.rpc('ga_record_click_sync',{p_sheet:source.id,p_received:received,p_inserted:inserted,p_success:true});
   if(error)throw new IntegrationError('Website import completed, but its status could not be recorded. Attribution is paused.',503);

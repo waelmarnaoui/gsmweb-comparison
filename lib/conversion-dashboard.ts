@@ -30,7 +30,7 @@ export function conversionDateRange(url:URL){
 export async function conversionDashboard(url:URL,options:{prepare?:boolean;client?:SupabaseClient}={}){
  const client=options.client||(await requireAdmin()).client,range=conversionDateRange(url),name=process.env.GOOGLE_ADS_CONVERSION_NAME||'GSMWeb CRM - All records from GSMWeb CRM';
  async function rows(table:string,columns:string){const all:Record<string,unknown>[]=[];for(let offset=0;offset<10000;offset+=500){const {data,error}=await client.from(table).select(columns).order('id').range(offset,offset+499);if(error)throw new IntegrationError('Conversion records could not be read.',503);all.push(...(data||[]) as unknown as Record<string,unknown>[]);if((data||[]).length<500)return all;}throw new IntegrationError('Too many conversion records. No partial export was generated.',503);}
- const [matches,calls,clicks,drafts]=await Promise.all([rows('ga_matches','id,call_id,click_id'),rows('ga_calls','id,phone,started_at,direction'),rows('ga_clicks','id,gclid,clicked_at,campaign,page_url'),rows('ga_conversion_drafts','id,match_id,payment_transaction_id,amount,currency,paid_at,gclid,status')]);
+ const [matches,calls,clicks,drafts]=await Promise.all([rows('ga_matches','id,call_id,click_id'),rows('ga_calls','id,phone,started_at,direction,external_id'),rows('ga_clicks','id,gclid,clicked_at,campaign,page_url'),rows('ga_conversion_drafts','id,match_id,payment_transaction_id,amount,currency,paid_at,gclid,status')]);
  const health=await matchingHealth(client),reviews=health.configured?await matchReviews(client):[];
  const source=health.configured?await clickSheetSource():null;
  const sourceReason=source?clickSyncReason(await readClickSyncState(client,source.id),source.id):MATCHING_PENDING;
@@ -117,7 +117,8 @@ export async function conversionDashboard(url:URL,options:{prepare?:boolean;clie
   const legacyPaymentIds=item.recordBasis?(itemCall?.repairPaymentIds[item.paymentId.slice((projectRef+':repair:').length)]||[]).map(id=>projectRef+':'+id):[];
   const uploaded=uploadedPayments.get(item.paymentId)||legacyPaymentIds.map(id=>uploadedPayments.get(id)).find(Boolean);
   const legacyExported=drafts.some(d=>d.status==='exported'&&legacyPaymentIds.includes(String(d.payment_transaction_id)));
-  return {...item,...extractBraidIdentifiers(click?.page_url,item.gclid),callId:comparison.find(c=>c.customer?.id===customer?.id)?.callId||'',consent:consent||null,financialReady:item.ready,userDataAllowed,ready:item.ready&&userDataAllowed&&!uploaded&&!legacyExported,reason:item.reason||consentReason||(uploaded?'Google upload: '+uploaded.state:legacyExported?'Repair payment already exported':'')};
+  const callId= comparison.find(c=>c.customer?.id===customer?.id)?.callId||'',interactionChannel=String(calls.find(call=>call.id===callId)?.external_id||'').startsWith('whatsapp-manual:')?'whatsapp' as const:'call' as const;
+  return {...item,...extractBraidIdentifiers(click?.page_url,item.gclid),callId,interactionChannel,consent:consent||null,financialReady:item.ready,userDataAllowed,ready:item.ready&&userDataAllowed&&!uploaded&&!legacyExported,reason:item.reason||consentReason||(uploaded?'Google upload: '+uploaded.state:legacyExported?'Repair payment already exported':'')};
  });
  return {items:enriched,range,conversionName:name,notice:observations.configured?'':'Phone-only conversions need first-match timestamp storage. Website-click conversions remain available.'};
 }
