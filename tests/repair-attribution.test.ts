@@ -5,6 +5,13 @@ import {reviewDay,isReviewDay} from '../lib/review-day';
 const repair={id:'r1',clientId:'client',repairCode:'GSM1',phoneModel:'Phone',entryDate:'2026-10-11T10:00:00Z',status:'RECEIVED',customerPrice:'450.00',repairCost:'150.00'};
 const candidate={callId:'missed',phone:'+40722882726',calledAt:'2026-10-10T06:42:16Z',clientId:'client',repair};
 const now=Date.parse('2026-10-11T12:00:00Z');
+test('one WhatsApp contact can produce two independent repair conversions without payments',()=>{
+ const contact={...candidate,callId:'whatsapp',phone:'+40723358266',calledAt:'2026-10-12T11:26:00Z'};
+ const first={...repair,id:'phone-one',entryDate:'2026-10-12T12:00:00Z'},second={...first,id:'phone-two',repairCost:200};
+ const result=attributeRepairs([{...contact,repair:first},{...contact,repair:second}],'crm',Date.parse('2026-10-14T12:00:00Z'));
+ assert.equal(result.length,2);assert.deepEqual(result.map(row=>row.id).sort(),['crm:repair:phone-one','crm:repair:phone-two']);
+ assert.deepEqual(result.map(row=>row.profit),[300,250]);
+});
 test('repair eligibility does not need a payment or completed status and preserves signed profit',()=>{
  for(const status of ['RECEIVED','COMPLETED','DELIVERED','CANCELLED'])assert.equal(attributeRepairs([{...candidate,repair:{...repair,status}}],'crm',now)[0].profit,300);
  assert.equal(repairProfit({...repair,repairCost:500}),-50);

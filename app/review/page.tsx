@@ -11,7 +11,7 @@ import type {readCrmDay} from '@/lib/crm-reader';
 type Item=Awaited<ReturnType<typeof conversionDashboard>>['items'][number];
 type Choices={measurement:ConsentStatus;personalization:ConsentStatus;obtainedAt:string};
 const localTime=(value:string)=>formatRomanianTimestamp(value).replace(' ','T');
-type Sources={clicks:{id:string;clicked_at:string;gclid:string;campaign:string;page_url:string}[];calls:{id:string;phone:string;started_at:string;direction:string;duration_seconds:number;firstInteraction:boolean;external_id?:string}[];crm:Awaited<ReturnType<typeof readCrmDay>>;crmError:string};
+type Sources={clicks:{id:string;clicked_at:string;gclid:string;campaign:string;page_url:string}[];calls:{id:string;phone:string;started_at:string;direction:string;duration_seconds:number;firstInteraction:boolean;external_id?:string}[];crm:(Awaited<ReturnType<typeof readCrmDay>>[number]&{matchingReason?:string;contactTime?:string})[];crmError:string};
 export default function Review(){
  const [items,setItems]=useState<Item[]>([]),[choices,setChoices]=useState<Record<string,Choices>>({});
  const [manifest,setManifest]=useState<ManifestEntry[]>([]),[history,setHistory]=useState<UploadRecord[]>([]),[configured,setConfigured]=useState(false);
@@ -26,9 +26,9 @@ export default function Review(){
  async function refresh(){
   setBusy(true);setNotice('');setConfirmed(false);setManifest([]);setConfigured(false);setAdsAuthorized(false);setItems([]);
   try{
+   setSources(await json('/api/review/sources?'+new URLSearchParams({from,to})));
    const data=await json('/api/conversions'+query,{method:'POST'}),eligible:Item[]=data.items.filter((item:Item)=>item.callId&&item.paymentId);
    setItems(eligible);setChoices(Object.fromEntries(eligible.map(item=>[item.callId,{measurement:item.consent?.ad_user_data||'granted',personalization:item.consent?.ad_personalization||'not_asked',obtainedAt:item.consent?localTime(item.consent.obtained_at):localTime(new Date().toISOString())}])));
-   setSources(await json('/api/review/sources?'+new URLSearchParams({from,to})));
    const review=await json('/api/ads/review'+query);setConfigured(review.configured);setHistory(review.history);
    const connection=await json('/api/ads/connection');setAdsAuthorized(connection.authorized);
    const visible=new Set(eligible.map(item=>item.paymentId));setManifest(review.manifest.filter((entry:ManifestEntry)=>visible.has(entry.paymentId)));
@@ -64,7 +64,7 @@ export default function Review(){
  <div className="table-scroll"><table><thead><tr><th>{tab==='clicks'?'CLICK / CAMPAIGN':tab==='calls'?'PHONE':'CLIENT / REPAIR'}</th><th>BUCHAREST TIME</th><th>{tab==='clicks'?'GCLID':tab==='calls'?'INTERACTION':'STATUS / PROFIT'}</th></tr></thead><tbody>
  {tab==='clicks'&&sources.clicks.map(row=><tr key={row.id}><td data-label="Campaign">{row.campaign||'Website click'}<small>{row.page_url}</small></td><td data-label="Time">{formatRomanianTimestamp(row.clicked_at)}</td><td data-label="GCLID">{row.gclid||'No GCLID'}</td></tr>)}
  {tab==='calls'&&sources.calls.map(row=><tr key={row.id}><td data-label="Phone">{row.phone}</td><td data-label="Time">{formatRomanianTimestamp(row.started_at)}</td><td data-label="Interaction">{row.external_id?.startsWith('whatsapp-manual:')?'WhatsApp · manual':row.direction}<small>{row.firstInteraction?'First customer interaction':'Follow-up / not eligible'}</small></td></tr>)}
- {tab==='crm'&&sources.crm.map(row=><tr key={row.id}><td data-label="Client / repair"><b>{row.customer}</b><small>{row.phone} · {row.repair}</small></td><td data-label="Time">{formatRomanianTimestamp(row.time)}</td><td data-label="Status / profit">{row.status}<small>{row.profit===null?'Profit missing':row.profit.toLocaleString('ro-RO')+' RON'}</small></td></tr>)}
+ {tab==='crm'&&sources.crm.map(row=><tr key={row.id}><td data-label="Client / repair"><b>{row.customer}</b><small>{row.phone} · {row.repair}</small></td><td data-label="Time">{formatRomanianTimestamp(row.time)}</td><td data-label="Status / profit">{row.status}<small>{row.profit===null?'Profit missing':row.profit.toLocaleString('ro-RO')+' RON'}</small><small>{row.matchingReason||'Contact and profit eligible; conversion review checks consent and upload status'}</small>{row.contactTime&&<small>First contact: {formatRomanianTimestamp(row.contactTime)}</small>}</td></tr>)}
  </tbody></table></div>{!sources[tab].length&&<p>No {tab==='crm'?'CRM repair entries':tab==='calls'?'calls':'website clicks'} in this date range.</p>}</section>
  {notice&&<p role="status" className="review-notice">{notice}</p>}{!configured&&<p role="alert">Google upload tracking needs database setup. No upload can start until it is installed.</p>}
  {!busy&&!adsAuthorized&&<p role="alert">Google Ads account is not connected in this app. <a href="/ads">Connect Google Ads</a></p>}

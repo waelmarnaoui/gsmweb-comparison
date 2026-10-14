@@ -12,11 +12,22 @@ export function crmVisitTime(value:string){
  try{return Date.parse(parseTimestamp(timestamp));}catch{return NaN;}
 }
 type Candidate={callId:string;phone:string;calledAt:string;clientId:string;repair:CrmRepair};
+export function repairEligibility(candidate:Candidate,projectRef:string,now=Date.now()){
+ const call=Date.parse(candidate.calledAt),visit=crmVisitTime(candidate.repair.entryDate);
+ if(!projectRef)return 'CRM project is not selected';
+ if(!safePhone(candidate.phone))return 'Invalid client phone number';
+ if(!Number.isFinite(call))return 'Invalid first-contact timestamp';
+ if(!Number.isFinite(visit))return 'Invalid CRM repair entry timestamp';
+ if(visit>now)return 'CRM repair entry is in the future';
+ if(call>visit)return 'Repair was created before the first recorded call or WhatsApp message';
+ if(visit-call>14*86400000)return 'Repair was created more than 14 days after first contact';
+ if(repairProfit(candidate.repair)===null)return 'Customer price or repair cost is missing or invalid';
+ return '';
+}
 export function attributeRepairs(candidates:Candidate[],projectRef:string,now=Date.now()){
  const groups=new Map<string,Candidate[]>();
  for(const candidate of candidates){
-  const call=Date.parse(candidate.calledAt),visit=crmVisitTime(candidate.repair.entryDate);
-  if(!projectRef||!safePhone(candidate.phone)||!Number.isFinite(call)||!Number.isFinite(visit)||call>visit||visit-call>14*86400000||visit>now||repairProfit(candidate.repair)===null)continue;
+  if(repairEligibility(candidate,projectRef,now))continue;
   const key=projectRef+':repair:'+candidate.repair.id;
   groups.set(key,[...(groups.get(key)||[]),candidate]);
  }
