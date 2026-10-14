@@ -3,7 +3,7 @@ import type {SupabaseClient} from '@supabase/supabase-js';
 import {crmClient} from './connections';
 import {IntegrationError} from './integration-error';
 import {compareCrmCall,safePhone,type CrmData} from './crm-comparison';
-import {isReviewDay,reviewDay} from './review-day';
+import {isReviewRange,reviewRange} from './review-day';
 import {repairProfit,crmVisitTime} from './repair-attribution';
 import type {CrmRepair} from './crm-comparison';
 export const CRM_TABLES=['Client','Repair','AccessorySale','PaymentTransaction','RepairSettlement','SaleSettlement'];
@@ -36,9 +36,9 @@ export async function readCrmComparison(calls:{id:string;phone:string;started_at
  const data={customers,repairs,sales,repairSettlements,saleSettlements,payments} as unknown as CrmData;
  return calls.map(c=>compareCrmCall(c,data));
 }
-export async function readCrmDay(day:string){
+export async function readCrmDay(day:string,to=day){
  const remote=await crmClient();if(!remote)throw new IntegrationError('Choose the separate CRM database in Connections first.',503);
- const range=reviewDay(day),repairs=(await readRows(remote,'Repair','id,clientId,repairCode,phoneModel,entryDate,status,customerPrice,repairCost',undefined,undefined,{field:'entryDate',start:range.start,end:range.end})).filter(r=>{const time=crmVisitTime(String(r.entryDate));return Number.isFinite(time)&&isReviewDay(new Date(time).toISOString(),day);});
+ const range=reviewRange(day,to),repairs=(await readRows(remote,'Repair','id,clientId,repairCode,phoneModel,entryDate,status,customerPrice,repairCost',undefined,undefined,{field:'entryDate',start:range.start,end:range.end})).filter(r=>{const time=crmVisitTime(String(r.entryDate));return Number.isFinite(time)&&isReviewRange(new Date(time).toISOString(),day,to);});
  const customers=await readRows(remote,'Client','id,name,phone','id',[...new Set(repairs.map(r=>String(r.clientId)))]);
  return repairs.map(row=>{const repair=row as unknown as CrmRepair,customer=customers.find(c=>c.id===repair.clientId);return {id:repair.id,customer:String(customer?.name||'Unknown client'),phone:String(customer?.phone||''),repair:repair.repairCode,time:new Date(crmVisitTime(repair.entryDate)).toISOString(),status:repair.status,price:repair.customerPrice??null,cost:repair.repairCost??null,profit:repairProfit(repair)};});
 }
