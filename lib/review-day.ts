@@ -6,3 +6,11 @@ export function reviewDay(value:string){
 export function isReviewDay(timestamp:string,day:string){
  try{const {start,end}=reviewDay(day),time=Date.parse(parseTimestamp(timestamp));return time>=Date.parse(start)&&time<=Date.parse(end);}catch{return false;}
 }
+export function reviewRange(from:string,to:string){
+ const start=reviewDay(from).start,end=reviewDay(to).end;
+ if(Date.parse(start)>Date.parse(end))throw new Error('End date must be on or after start date.');
+ return {from,to,start,end};
+}
+export function isReviewRange(timestamp:string,from:string,to:string){
+ try{const range=reviewRange(from,to),time=Date.parse(parseTimestamp(timestamp));return time>=Date.parse(range.start)&&time<=Date.parse(range.end);}catch{return false;}
+}
