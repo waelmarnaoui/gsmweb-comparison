@@ -12,14 +12,16 @@ export function safeGoogleCodes(body:unknown){
 }
 export type ResourceState={value:string;campaignId:string;approvalStatus?:string;reviewStatus?:string;topics?:number;budgetShared?:boolean;evidenceHash?:string};
 export type ControlGoogle={read:(kind:Kind,resource:string)=>Promise<ResourceState>;mutate:(kind:Kind,resource:string,value:string,validateOnly?:boolean)=>Promise<{requestId:string|null}>};
-type Options={accountId:string;developerToken:string;loginCustomerId?:string;token:()=>Promise<string>;fetcher?:typeof fetch};
+type Options={accountId:string;developerToken?:string;loginCustomerId?:string;token:()=>Promise<string>;fetcher?:typeof fetch};
 export type ControlCampaign={resourceName:string;name:string;status:string;budgetResource:string|null;budgetMicros:string|null;budgetEditable:boolean;shared:boolean};
 export function createControlGoogle(o:Options):ControlGoogle&{campaigns:()=>Promise<ControlCampaign[]>}{
  resourceFor('campaign_pause',o.accountId,`customers/${o.accountId}/campaigns/1`);
- if(!o.developerToken||o.loginCustomerId&&!/^\d{10}$/.test(o.loginCustomerId))throw new ControlProviderError('google_control_configuration_missing');
+ // Since 2026-09-09, access is attached to the OAuth Cloud project. The
+ // deprecated developer-token header is optional and must not block control.
+ if(o.loginCustomerId&&!/^\d{10}$/.test(o.loginCustomerId))throw new ControlProviderError('google_manager_account_invalid');
  async function request(path:string,body:unknown,writing=false){
   const token=await o.token();let response:Response;
-  try{response=await(o.fetcher??fetch)(`https://googleads.googleapis.com/${ADS_REPORTING_VERSION}/customers/${o.accountId}/${path}`,{method:'POST',headers:{Authorization:'Bearer '+token,'developer-token':o.developerToken,'Content-Type':'application/json',...(o.loginCustomerId?{'login-customer-id':o.loginCustomerId}:{})},body:JSON.stringify(body),cache:'no-store',redirect:'error',signal:AbortSignal.timeout(12000)});}
+  try{response=await(o.fetcher??fetch)(`https://googleads.googleapis.com/${ADS_REPORTING_VERSION}/customers/${o.accountId}/${path}`,{method:'POST',headers:{Authorization:'Bearer '+token,...(o.developerToken?{'developer-token':o.developerToken}:{}),'Content-Type':'application/json',...(o.loginCustomerId?{'login-customer-id':o.loginCustomerId}:{})},body:JSON.stringify(body),cache:'no-store',redirect:'error',signal:AbortSignal.timeout(12000)});}
   catch{throw new ControlProviderError('google_transport_failed',writing);}
   if(!response.ok){let body:unknown;try{body=await response.json();}catch{}throw new ControlProviderError(response.status===429?'google_rate_limited':response.status>=500?'google_unavailable':'google_request_rejected',writing&&response.status>=500,safeGoogleCodes(body),response.status);}
   let data;try{data=await response.json();}catch{throw new ControlProviderError('google_response_invalid',writing);}
