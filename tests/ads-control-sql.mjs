@@ -33,5 +33,9 @@ try{
  const pairing='00000000-0000-0000-0000-000000000010';
  await db.query("insert into ga_ads_worker_pairings(id,account_id,token_hash,deployment_id,canary_campaign_id,created_by) values($1,$2,$3,'laptop-test','1',$4)",[pairing,account,'d'.repeat(64),actor]);
  const claim=()=>db.query('update ga_ads_worker_pairings set claimed_at=now() where id=$1 and claimed_at is null and expires_at>now() returning id',[pairing]);assert.equal((await claim()).rows.length,1);assert.equal((await claim()).rows.length,0);
+ await db.query('update ga_ads_worker_pairings set token_hash=$2 where id=$1',[pairing,'e'.repeat(64)]);
+ assert.equal((await db.query('select id from ga_ads_worker_pairings where token_hash=$1',['d'.repeat(64)])).rows.length,0);
+ const capability=()=>db.query('select p.id from ga_ads_worker_pairings p join ga_ads_control c on c.account_id=p.account_id and c.recovery_deployment_id=p.deployment_id where p.token_hash=$1 and p.claimed_at is not null',['e'.repeat(64)]);
+ assert.equal((await capability()).rows.length,0);await db.query("update ga_ads_control set recovery_deployment_id='laptop-test' where account_id=$1",[account]);assert.equal((await capability()).rows.length,1);
  console.log('PASS: control SQL executed in local PostgreSQL; default pause, exclusive fenced leases, idempotency, exact approval constraints, duplicate live intent blocked, budget increases rejected, append-only audit, RLS and browser-role access denial. No production data changed.');
 }finally{await db.close();}

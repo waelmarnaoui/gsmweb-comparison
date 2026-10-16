@@ -92,3 +92,11 @@ test('REST adapter uses narrow masks and validateOnly; never returns malformed s
  assert.equal(calls[0].body.validateOnly,true);assert.equal(calls[1].body.partialFailure,false);assert.deepEqual(calls[1].body.operations,[{update:{resourceName:`customers/${account}/adGroupAds/1~2`,status:'PAUSED'},updateMask:'status'}]);
  const malformed=createControlGoogle({accountId:account,developerToken:'test',token:async()=>'test',fetcher:async()=>Response.json({})});await assert.rejects(malformed.mutate('ad_status',`customers/${account}/adGroupAds/1~2`,'PAUSED'),e=>e instanceof ControlProviderError&&e.uncertain);
 });
+test('live ad reads enforce responsive Search scope and bind policy plus exact copy evidence',async()=>{
+ const resource=`customers/${account}/adGroupAds/1~2`;
+ const row={campaign:{id:'1',advertisingChannelType:'SEARCH'},adGroupAd:{resourceName:resource,status:'PAUSED',ad:{type:'RESPONSIVE_SEARCH_AD',responsiveSearchAd:{headlines:[{text:'Verified display'}],descriptions:[{text:'In-store installation'}]},finalUrls:['https://gsmweb.site/']},policySummary:{approvalStatus:'APPROVED',reviewStatus:'REVIEWED'}}};
+ const provider=createControlGoogle({accountId:account,developerToken:'test',token:async()=>'test',fetcher:async()=>Response.json({results:[row]})});
+ const state=await provider.read('ad_status',resource);assert.equal(state.approvalStatus,'APPROVED');assert.match(state.evidenceHash!,/^[a-f0-9]{64}$/);
+ row.adGroupAd.ad.responsiveSearchAd.headlines[0].text='Changed copy';assert.notEqual((await provider.read('ad_status',resource)).evidenceHash,state.evidenceHash);
+ row.campaign.advertisingChannelType='PERFORMANCE_MAX';await assert.rejects(provider.read('ad_status',resource),e=>e instanceof ControlProviderError&&e.code==='google_resource_outside_scope');
+});

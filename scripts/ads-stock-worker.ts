@@ -11,7 +11,7 @@ async function main(){
   try{
    const response=await fetch(new URL('/api/ai-ads/control/tick',appOrigin),{method:'POST',headers:{Authorization:'Bearer '+secret},redirect:'error',signal:AbortSignal.timeout(280000)});
    if(!response.ok)throw new Error('Stock check failed.');
-   const data=await response.json();if(data.checked!==true)throw new Error('Stock result invalid.');
+   const data=await response.json();if(data.checked!==true||data.changesConfirmed===false)throw new Error('Stock result invalid or synchronization failed.');
    console.info(data.reliable?'Stock control check completed.':'Stock source unavailable; no automatic change confirmed.');
   }catch{console.error('Stock control check failed. Review worker health in Account control.');}
   if(process.argv.includes('--once'))break;

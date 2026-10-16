@@ -14,6 +14,7 @@ import {IntegrationError} from '../integration-error';
 import {readRepairInventory} from '../ai-ads/source';
 import type {AgentAlert} from '../agent-policy';
 const safeError=(message:string)=>new IntegrationError(message,503);
+const monitorDeployment=(settings:{recovery_deployment_id?:string|null})=>process.env.ADS_CONTROL_MONITOR_DEPLOYMENT_ID??settings.recovery_deployment_id??'dashboard';
 export function controlGoogle(){return createControlGoogle({accountId:agentAccount(),developerToken:process.env.GOOGLE_ADS_DEVELOPER_TOKEN??'',loginCustomerId:process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID,token:async()=>(await connectionToken('google_ads_management')).token});}
 export async function setupControl(){
  const db=service(),account=agentAccount();
@@ -31,10 +32,10 @@ export async function readControl(){
  ]);
  if(actions.error||mappings.error||events.error)throw safeError(controlStorageMessage);
  if((mappings.data?.length??0)>1000)throw safeError('Product mapping limit reached. Review the control scope.');
- const blockers=stockControlReady(settings,heartbeats,process.env.ADS_CONTROL_MONITOR_DEPLOYMENT_ID??'dashboard',stock.reliable);
+ const blockers=stockControlReady(settings,heartbeats,monitorDeployment(settings),stock.reliable);
  if(!mappings.data?.length)blockers.push('Link a live ad to its verified inventory product.');
  const {lock_token:unusedToken,lock_until:unusedUntil,...publicSettings}=settings as typeof settings&{lock_token?:string;lock_until?:string};void unusedToken;void unusedUntil;
- return {settings:publicSettings,heartbeats,blockers,checkMode:process.env.ADS_CONTROL_MONITOR_DEPLOYMENT_ID?'scheduled':'dashboard',recoveryReady:recoveryReady(heartbeats,settings.recovery_deployment_id??process.env.ADS_CONTROL_RECOVERY_DEPLOYMENT_ID),
+ return {settings:publicSettings,heartbeats,blockers,checkMode:monitorDeployment(settings)==='dashboard'?'dashboard':'scheduled',recoveryReady:recoveryReady(heartbeats,settings.recovery_deployment_id??process.env.ADS_CONTROL_RECOVERY_DEPLOYMENT_ID),
   mode:settings.stock_enabled&&!settings.global_paused&&blockers.length===0?'STOCK_CONTROL':'ADVISE',actions:actions.data as Action[],mappings:mappings.data,events:events.data,
   products:stock.reliable?(stock.snapshot?.parts??[]).filter(p=>p.category==='PART'&&advertisingPartType(p.partType)).map(p=>({id:p.id,name:p.name,available:p.available,eligible:p.eligible,fingerprint:p.fingerprint})):[],
   limitations:['Automatic control only pauses individually mapped ads for unavailable or materially changed stock. It never re-enables ads automatically.','Temporary campaign pauses recover after eight minutes, leaving a two-minute margin. Provider or infrastructure outages can still delay recovery.','New ad publication remains policy-blocked. Bid optimization, new campaigns, budget increases and targeting changes are outside this release.','Google reporting can lag. Daily allowances are monitoring safeguards, not a guaranteed billing cap.']};
@@ -112,7 +113,7 @@ async function preflight(a:Action){
   if(part?.fingerprint!==a.inventory_fingerprint&&!(part===undefined&&a.inventory_fingerprint===actionKey({missing:a.product_id})))throw new Error('inventory_changed');
   if(!stockNeedsPause(mapping.data as Mapping,part))throw new Error('inventory_changed');
   const beats=await controlHeartbeats(db,a.account_id),settings=await controlStore(db).settings(a.account_id);
-  if(stockControlReady(settings,beats,process.env.ADS_CONTROL_MONITOR_DEPLOYMENT_ID??'dashboard',true).length)throw new Error('monitor_worker_unavailable');
+  if(stockControlReady(settings,beats,monitorDeployment(settings),true).length)throw new Error('monitor_worker_unavailable');
  }
 }
 export function serverControlEngine(){const db=service(),store=controlStore(db);return createControlEngine({store,google:controlGoogle(),preflight,recoveryHealthy:async()=>{const settings=await store.settings(agentAccount());return recoveryReady(await controlHeartbeats(db,agentAccount()),settings.recovery_deployment_id??process.env.ADS_CONTROL_RECOVERY_DEPLOYMENT_ID);}});}
@@ -129,8 +130,8 @@ export async function proposeRollback(actor:string,id:string,requestId:string){
  if(a.kind!=='ad_status')throw new IntegrationError('Campaign pauses use automatic recovery. Reversing a budget reduction would increase spending and requires a separately implemented spending approval.',409);
  return proposeAction(actor,{kind:a.kind,resource:a.resource_name,value:a.before_value,requestId});
 }
-export async function runStockControlTick(interactive=false){
- const {db,account,store}=await setupControl(),deployment=interactive?'dashboard':process.env.ADS_CONTROL_MONITOR_DEPLOYMENT_ID;
+export async function runStockControlTick(interactive=false,registeredDeployment?:string){
+ const {db,account,store}=await setupControl(),deployment=interactive?'dashboard':registeredDeployment??process.env.ADS_CONTROL_MONITOR_DEPLOYMENT_ID;
  if(!deployment||deployment.length>100)throw safeError('Configure the stock worker deployment identity.');
  const stock=await collectStockMonitor();
  const r=await db.from('ga_ads_control_workers').upsert({account_id:account,role:'monitor',deployment_id:deployment,version:CONTROL_VERSION,checked_at:new Date().toISOString(),ok:stock.reliable});if(r.error)throw safeError(controlStorageMessage);
@@ -139,7 +140,7 @@ export async function runStockControlTick(interactive=false){
  const unresolved=await db.from('ga_ads_actions').select('id').eq('account_id',account).neq('kind','campaign_pause').in('state',['executing','uncertain']).order('created_at').limit(3);if(unresolved.error)throw safeError(controlStorageMessage);
  for(const a of unresolved.data??[])await serverControlEngine().reconcile(a.id);
  const mappings=await db.from('ga_ads_product_ads').select('*').eq('account_id',account).eq('active',true).limit(1001);if(mappings.error||(mappings.data?.length??0)>1000)throw safeError('Stock mapping read failed or exceeded its limit.');
- let changed=0;const google=controlGoogle(),engine=serverControlEngine();
+ let changed=0,failures=0;const google=controlGoogle(),engine=serverControlEngine();
  // Bound each invocation; unprocessed mappings remain eligible on the next tick.
  const live=await controlResources(),enabled=new Set(live.ads.filter(a=>a.status==='ENABLED').map(a=>a.resourceName));
  const candidates=(mappings.data as Mapping[]).filter(m=>enabled.has(m.resource_name)&&stockNeedsPause(m,stock.snapshot?.parts.find(p=>p.id===m.product_id)));
@@ -150,16 +151,21 @@ export async function runStockControlTick(interactive=false){
   const created=await db.from('ga_ads_actions').upsert({id:randomUUID(),account_id:account,kind:'ad_status',resource_name:m.resource_name,before_value:'ENABLED',after_value:'PAUSED',source:'stock',product_id:m.product_id,inventory_fingerprint:fingerprint,reason:part?.eligible?'Mapped inventory changed since approval. Pause for a new product review.':'Mapped inventory is unavailable or below its stock threshold.',state:'approved',idempotency_key:key},{onConflict:'account_id,idempotency_key',ignoreDuplicates:true}).select('id');
   if(created.error)throw safeError(controlStorageMessage);
   // An expired/failed action is not silently approved again. Owner review is required.
-  if(created.data?.[0]){const result=await engine.execute(created.data[0].id);if(result.state==='confirmed')changed++;}
+  if(created.data?.[0]){const result=await engine.execute(created.data[0].id);if(result.state==='confirmed')changed++;else failures++;}
+  else{
+   const existing=await db.from('ga_ads_actions').select('state').eq('account_id',account).eq('idempotency_key',key).maybeSingle();
+   if(existing.error||!existing.data||!['approved','confirmed'].includes(existing.data.state))failures++;
+  }
  }
  // Survive a crash after inserting approval but before claiming it.
  const pending=await db.from('ga_ads_actions').select('id').eq('account_id',account).eq('source','stock').eq('state','approved').gt('expires_at',new Date().toISOString()).order('created_at').limit(5);
  if(pending.error)throw safeError(controlStorageMessage);
- for(const a of pending.data??[]){const result=await engine.execute(a.id);if(result.state==='confirmed')changed++;}
- return {checked:true,changed,reliable:true};
+ for(const a of pending.data??[]){const result=await engine.execute(a.id);if(result.state==='confirmed')changed++;else failures++;}
+ if(failures)await markControlWorkerFailed(interactive,registeredDeployment);
+ return {checked:true,changed,reliable:true,changesConfirmed:failures===0};
 }
-export async function markControlWorkerFailed(interactive=false){
- const deployment=interactive?'dashboard':process.env.ADS_CONTROL_MONITOR_DEPLOYMENT_ID;if(!deployment)return;
+export async function markControlWorkerFailed(interactive=false,registeredDeployment?:string){
+ const deployment=interactive?'dashboard':registeredDeployment??process.env.ADS_CONTROL_MONITOR_DEPLOYMENT_ID;if(!deployment)return;
  const r=await service().from('ga_ads_control_workers').upsert({account_id:agentAccount(),role:'monitor',deployment_id:deployment,version:CONTROL_VERSION,checked_at:new Date().toISOString(),ok:false});
  if(r.error)throw safeError(controlStorageMessage);
 }
@@ -167,7 +173,7 @@ export async function readControlAlerts():Promise<AgentAlert[]>{
  try{
   const db=service(),account=agentAccount(),settings=await controlStore(db).settings(account),beats=await controlHeartbeats(db,account);
   const alerts:AgentAlert[]=[];
-  if(settings.stock_enabled&&!settings.global_paused&&stockControlReady(settings,beats,process.env.ADS_CONTROL_MONITOR_DEPLOYMENT_ID??'dashboard',true).length)alerts.push({key:'stock-control-worker-stale',level:'critical',message:'Automatic stock control has lost its worker health check. Current inventory-to-ad synchronization is unconfirmed. Open Account control and restart checks.'});
+  if(settings.stock_enabled&&!settings.global_paused&&stockControlReady(settings,beats,monitorDeployment(settings),true).length)alerts.push({key:'stock-control-worker-stale',level:'critical',message:'Automatic stock control has lost its worker health check. Current inventory-to-ad synchronization is unconfirmed. Open Account control and restart checks.'});
   const actions=await db.from('ga_ads_actions').select('id,kind,state,recovery_due_at,error_code').eq('account_id',account).in('state',['executing','uncertain','failed','confirmed']).order('created_at',{ascending:false}).limit(100);
   if(actions.error)throw new Error('Storage unavailable.');
   for(const a of actions.data??[]){

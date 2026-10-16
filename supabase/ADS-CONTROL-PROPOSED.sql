@@ -49,7 +49,7 @@ create table public.ga_ads_action_events(
  action_id uuid references public.ga_ads_actions(id),actor uuid references auth.users(id),
  event text not null,details jsonb not null,created_at timestamptz not null default now()
 );
--- Only a one-time setup-code hash is stored. No bootstrap credentials are stored here.
+-- Only setup/runtime capability hashes are stored. No bootstrap credentials are stored here.
 create table public.ga_ads_worker_pairings(
  id uuid primary key,account_id text not null references public.ga_ads_control(account_id),
  token_hash text not null unique check(token_hash ~ '^[a-f0-9]{64}$'),

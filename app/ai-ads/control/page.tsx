@@ -24,7 +24,7 @@ export default function ControlCenter(){
   let stopped=false;
   const tick=async()=>{
    if(ticking.current||document.hidden)return;ticking.current=true;
-   try{const result=await api({operation:'tick'});if(!stopped){await refresh();if(!result.reliable)setNotice('Current stock is unconfirmed; no automatic stock change is authorized.');}}
+   try{const result=await api({operation:'tick'});if(!stopped){await refresh();if(!result.reliable)setNotice('Current stock is unconfirmed; no automatic stock change is authorized.');else if(result.changesConfirmed===false)setNotice('Some stock-related ad changes could not be confirmed. Review their action history and the live account.');}}
    catch(e){if(!stopped){setStale(true);setNotice(e instanceof Error?e.message:'Dashboard check failed.');}}
    finally{ticking.current=false;}
   };
@@ -42,7 +42,7 @@ export default function ControlCenter(){
   await api({operation:'propose',kind,resource:target,value:next,requestId:crypto.randomUUID()});setNotice('Proposal saved. Review its exact before and after values, then approve it.');
  }
  return <div className="setup-page"><header className="setup-header"><a href="/optimizer" className="secondary">Your agent</a><strong>GSMWEB</strong><a href="/ai-ads" className="secondary">Stock and drafts</a></header><main className="setup-main">
-  <div className="eyebrow">AI ADS MANAGER</div><h1>Account control</h1><p>Grant specific capabilities, review changes and see what Google actually confirmed.</p><p>Stock checks run while this page is open and visible. Pair this laptop below for independent campaign recovery. A server can run continuous stock checks later.</p>
+  <div className="eyebrow">AI ADS MANAGER</div><h1>Account control</h1><p>Grant specific capabilities, review changes and see what Google actually confirmed.</p><p>Pair this laptop below for background stock checks and independent campaign recovery, even when the tab closes. Dashboard checks are also available while this page stays open and visible.</p>
   {notice&&<p className="agent-notice" role="status">{notice}</p>}
   {stale&&<p role="alert">Current control status is unconfirmed. Refresh before relying on the status below.</p>}
   <div className="agent-actions"><button className="secondary" disabled={busy} onClick={()=>void run(refresh)}>Refresh status</button><button className="secondary" disabled={busy||!data} onClick={()=>setWatching(v=>!v)}>{watching?'Stop dashboard checks':'Start dashboard checks'}</button><button className="secondary" disabled={busy} onClick={()=>void run(async()=>{setResources(await api(undefined,true));})}>Load live ads and campaigns</button><button className="primary" disabled={busy||!data} onClick={()=>void run(()=>api({operation:'settings',paused:true}))}>Pause automation</button></div>
