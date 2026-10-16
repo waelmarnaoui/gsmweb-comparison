@@ -1,4 +1,5 @@
 import {digest,type InventoryPart} from './inventory';
+import {prepareCopyVariants,type CopyVariant} from './variants';
 export const POLICY_VERSION='gsmweb-repair-2026-10-16';
 export const POLICY_CHECKED_AT='2026-10-16T11:08:48.000Z';
 export const policySources=[
@@ -10,7 +11,7 @@ export const policySources=[
  {id:'consumer_law',title:'EU consumer guarantees: applicability requires market review',url:'https://europa.eu/youreurope/business/selling-in-eu/consumer-contracts-guarantees/consumer-guarantees/index_en.htm'}
 ];
 export type PolicyIssue={code:string;risk:'low'|'medium'|'high';explanation:string;correction:string;source:string};
-export type RepairDraft={id:string;productId:string;inventoryFingerprint:string;offerType:'in_store_consumer_phone_repair';state:'internal_blocked';headlines:string[];descriptions:string[];keywords:{text:string;matchType:'EXACT'|'PHRASE';basis:string}[];negativeSuggestions:{text:string;needsApproval:true}[];landingUrl:string|null;repairPriceBani:null;stockAtGeneration:number|null;partPriceAtGenerationBani:number|null;policy:{version:string;checkedAt:string;reviewExpiresAt:string;risk:'high';publishAllowed:false;issues:PolicyIssue[];sources:typeof policySources};createdAt:string;contentHash:string;searchVolume:null;competition:null};
+export type RepairDraft={id:string;productId:string;inventoryFingerprint:string;offerType:'in_store_consumer_phone_repair';state:'internal_blocked';headlines:string[];descriptions:string[];variants?:CopyVariant[];keywords:{text:string;matchType:'EXACT'|'PHRASE';basis:string}[];negativeSuggestions:{text:string;needsApproval:true}[];landingUrl:string|null;repairPriceBani:null;stockAtGeneration:number|null;partPriceAtGenerationBani:number|null;policy:{version:string;checkedAt:string;reviewExpiresAt:string;risk:'high';publishAllowed:false;issues:PolicyIssue[];sources:typeof policySources};createdAt:string;contentHash:string;searchVolume:null;competition:null};
 function compact(text:string){return text.replace(/\s+/g,' ').trim();}
 function fit(text:string,max:number){const chars=Array.from(compact(text));return chars.length<=max?chars.join(''):null;}
 export function generateRepairDraft(part:InventoryPart,landingUrl:string|null,now=Date.now()):RepairDraft{
@@ -29,7 +30,7 @@ export function generateRepairDraft(part:InventoryPart,landingUrl:string|null,no
  const reviewed=Date.parse(POLICY_CHECKED_AT),expires=reviewed+7*86400000;
  if(now>expires||now<reviewed-60000)issues.push({code:'policy_review_stale',risk:'high',explanation:'The official-source policy review is outside its validity window.',correction:'Review current official policies and update the versioned source record; timestamps must not refresh automatically without a review.',source:policySources[0].url});
  const body={productId:part.id,inventoryFingerprint:part.fingerprint,offerType:'in_store_consumer_phone_repair' as const,state:'internal_blocked' as const,headlines,descriptions,keywords,negativeSuggestions:['manual','tutorial','DIY'].map(text=>({text,needsApproval:true as const})),landingUrl,repairPriceBani:null,stockAtGeneration:part.available,partPriceAtGenerationBani:part.partPriceBani,
-  policy:{version:POLICY_VERSION,checkedAt:new Date(now).toISOString(),reviewExpiresAt:new Date(expires).toISOString(),risk:'high' as const,publishAllowed:false as const,issues,sources:policySources},searchVolume:null,competition:null};
+  variants:prepareCopyVariants(part),policy:{version:POLICY_VERSION,checkedAt:new Date(now).toISOString(),reviewExpiresAt:new Date(expires).toISOString(),risk:'high' as const,publishAllowed:false as const,issues,sources:policySources},searchVolume:null,competition:null};
  const contentHash=digest({...body,policy:{...body.policy,checkedAt:POLICY_CHECKED_AT}});
  return {...body,id:digest({source:part.sourceProject,product:part.id,contentHash}),createdAt:new Date(now).toISOString(),contentHash};
 }
