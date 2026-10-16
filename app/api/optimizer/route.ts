@@ -8,8 +8,8 @@ export async function GET(){try{
  if(error)throw new Error('Observation storage is unavailable. Install the reviewed migration.');
  const observation=(data?.observation??null) as AdsObservation|null;
  return Response.json({mode:'OBSERVE',executionEnabled:false,targetCpcRon:TARGET_CPC_RON,
-  stale:!observation||!Number.isFinite(Date.parse(observation.fetchedAt))||Date.now()-Date.parse(observation.fetchedAt)>3600000,
+  stale:!observation||!Number.isFinite(Date.parse(observation.fetchedAt))||Date.now()-Date.parse(observation.fetchedAt)>900000,
   observation:observation?{...observation,campaigns:observation.campaigns.map(c=>({...c,...summarizeCampaign(c,observation.currency)}))}:null,
-  blockers:['Daily spend limit is unset.','Visibility floors are unset.','Paid-customer attribution and profit need reconciliation.','All live ad changes require explicit approval.']
+  blockers:['Spending allowance uses yesterday’s confirmed customer payments, capped at 400 lei.','Visibility floors and CPA thresholds require configuration.','Paid-customer attribution and profit need reconciliation.','Account control has not been activated.']
  },{headers:{'Cache-Control':'no-store'}});
  }catch(error){return apiError(error);}}

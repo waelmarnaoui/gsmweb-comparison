@@ -25,11 +25,12 @@ function fixture(pages:unknown[]){
 const account={results:[{customer:{id:'2050434247',currencyCode:'RON',timeZone:'Europe/Bucharest'}}]};
 const row={campaign:{id:'1',name:'Repairs'},metrics:{clicks:'10',costMicros:'40000000',searchImpressionShare:0.0999,searchTopImpressionShare:0.65}};
 test('collector follows pagination and only calls search, preserving missing/censored shares',async()=>{
- const {observer,calls}=fixture([account,{results:[row],nextPageToken:'next'},{results:[{...row,campaign:{id:'2'}}]}]);
+ const {observer,calls}=fixture([account,{results:[row],nextPageToken:'next'},{results:[{...row,campaign:{id:'2'}}]},{results:[{customer:{id:'2050434247'},metrics:{costMicros:'12000000',clicks:'4'}}]}]);
  const report=await observer.collect();
  assert.equal(report.campaigns.length,2);assert.equal(report.campaigns[0].searchShare,null);assert.equal(report.campaigns[0].topShare,0.65);
  assert.equal(report.campaigns[0].rankLostShare,null);assert.equal(report.windowEnd,'2026-10-15');
  assert.ok(calls.every(c=>c.url.endsWith('/googleAds:search')));assert.equal(calls[2].body.pageToken,'next');
+ assert.deepEqual(report.today,{date:'2026-10-16',costMicros:'12000000',clicks:4});
 });
 test('wrong account, repeated pages, duplicates and invalid metrics reject the entire report',async()=>{
  await assert.rejects(fixture([{results:[{customer:{id:'0000000000'}}]}]).observer.collect(),/identity/);

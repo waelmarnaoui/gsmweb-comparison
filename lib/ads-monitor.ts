@@ -9,6 +9,7 @@ export type CampaignObservation = {
 export type AdsObservation = {
  accountId:string; currency:string; timeZone:string; windowStart:string; windowEnd:string;
  fetchedAt:string; campaigns:CampaignObservation[]; requestIds:string[];
+ today?:{date:string;costMicros:string;clicks:number};
 };
 type Row = Record<string, any>;
 type Options = {accountId:string; loginCustomerId?:string; developerToken?:string; token:()=>Promise<string>; fetcher?:typeof fetch; now?:()=>number};
@@ -79,6 +80,11 @@ export function createAdsObserver(options:Options){
     clicks:Number(integer(m.clicks)),costMicros:integer(m.costMicros),searchShare:share(m.searchImpressionShare),topShare:share(m.searchTopImpressionShare),
     absoluteTopShare:share(m.searchAbsoluteTopImpressionShare),budgetLostShare:share(m.searchBudgetLostImpressionShare),rankLostShare:share(m.searchRankLostImpressionShare)};
   });
-  return {accountId:customer,currency:account.currencyCode,timeZone:account.timeZone,windowStart:window.start,windowEnd:window.end,fetchedAt:new Date(now()).toISOString(),campaigns,requestIds};
+  const day=calendarDay(now(),account.timeZone);
+  const todayRows=await search(`SELECT customer.id, metrics.cost_micros, metrics.clicks FROM customer WHERE segments.date = '${day}'`);
+  if(todayRows.length>1||todayRows.some(row=>String(row.customer?.id)!==customer||!row.metrics))throw new Error('Incomplete intraday account report.');
+  const today={date:day,costMicros:integer(todayRows[0]?.metrics?.costMicros),clicks:Number(integer(todayRows[0]?.metrics?.clicks))};
+  if(calendarDay(now(),account.timeZone)!==day)throw new Error('Account calendar changed during collection. Collect again.');
+  return {accountId:customer,currency:account.currencyCode,timeZone:account.timeZone,windowStart:window.start,windowEnd:window.end,fetchedAt:new Date(now()).toISOString(),campaigns,requestIds,today};
  }};
 }

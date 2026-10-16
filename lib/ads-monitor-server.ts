@@ -11,8 +11,8 @@ export async function collectAdsObservation(){
   developerToken:process.env.GOOGLE_ADS_DEVELOPER_TOKEN,
   token:async()=>(await connectionToken('google_ads_management')).token});
  const observation=await observer.collect();
- // Concurrent collection is safe: one append per account and half-hour slot.
- const slot=new Date(Math.floor(Date.parse(observation.fetchedAt)/1800000)*1800000).toISOString();
+ // Concurrent collection is safe: one append per account and five-minute slot.
+ const slot=new Date(Math.floor(Date.parse(observation.fetchedAt)/300000)*300000).toISOString();
  const {error}=await service().from('ga_ads_observations').upsert({account_id:accountId,slot,observation},{onConflict:'account_id,slot',ignoreDuplicates:true});
  if(error)throw new IntegrationError('Report was read but could not be saved. Install the reviewed observation migration.',503);
  return observation;

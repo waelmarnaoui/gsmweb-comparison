@@ -1,0 +1,67 @@
+'use client';
+import {useCallback,useEffect,useRef,useState} from 'react';
+import type {AdvisoryReply} from '@/lib/agent-model';
+import type {AgentAlert} from '@/lib/agent-policy';
+type Context={businessDate:string;yesterday:string;checkinDue:boolean;today:{amountBani:number;rating:string;targetReached:boolean;gapBani:number}|null;yesterdayPaymentsBani:number|null;allowance:{allowanceBani:number|null;reason:string};control:{mode:string;canEnable:boolean;maxPauseSeconds:number;blockers:string[]};alerts:AgentAlert[];aiConfigured:boolean;observation:{fetchedAt:string}|null;limitations:string[]};
+type Exchange={id:string;user_message:string;assistant_reply:AdvisoryReply|null;state:string;observation_at:string|null};
+async function api(path:string,method='GET',body?:unknown){
+ const response=await fetch('/api/optimizer/'+path,{method,cache:'no-store',...(body?{headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{})});
+ if(response.status===401){window.location.assign('/login');throw new Error('Sign in required.');}
+ const data=await response.json();if(!response.ok)throw new Error(data.error||'Agent unavailable.');return data;
+}
+const analysisRequest='Analyze the latest account report. Explain what you observed, the highest priority improvement, expected impact, risks and missing information. Do not change the account.';
+export default function AdsAgent(){
+ const [context,setContext]=useState<Context|null>(null),[history,setHistory]=useState<Exchange[]>([]),[message,setMessage]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[voice,setVoice]=useState(false),[controlReview,setControlReview]=useState(false),[amount,setAmount]=useState(''),[checkDate,setCheckDate]=useState(''),[confirmed,setConfirmed]=useState(false),[automatic,setAutomatic]=useState(false);
+ const seenAlerts=useRef(new Set<string>()),lastCheckin=useRef(''),lastAnalysis=useRef(''),inFlight=useRef(false);
+ const [monitoringError,setMonitoringError]=useState('');
+ const speak=useCallback((text:string)=>{
+  if(!('speechSynthesis' in window)){setNotice('This browser cannot play spoken warnings. Text alerts remain available.');return;}
+  const utterance=new SpeechSynthesisUtterance(text);utterance.lang='en-GB';utterance.onerror=()=>setNotice('Voice playback was blocked or failed. Read the visible warning.');window.speechSynthesis.speak(utterance);
+ },[]);
+ const refresh=useCallback(async()=>{
+  try{const [next,chats]=await Promise.all([api('agent'),api('chat')]);setContext(next);setHistory(chats.exchanges);setMonitoringError('');}
+  catch(error){setMonitoringError('Agent monitoring cannot refresh. Check the connection and do not rely on old warnings.');setNotice(error instanceof Error?error.message:'Agent unavailable.');}
+ },[]);
+ useEffect(()=>{void refresh();const timer=setInterval(()=>{if(!document.hidden)void refresh();},30000);return()=>clearInterval(timer);},[refresh]);
+ useEffect(()=>{
+  if(!voice)return;
+  if(monitoringError&&!seenAlerts.current.has('monitoring-error')){seenAlerts.current.add('monitoring-error');speak(monitoringError);}
+  if(!monitoringError)seenAlerts.current.delete('monitoring-error');
+  if(!context)return;
+  for(const alert of context.alerts){if(!seenAlerts.current.has(alert.key)){seenAlerts.current.add(alert.key);speak(alert.message);}}
+  if(context.checkinDue&&lastCheckin.current!==context.businessDate){lastCheckin.current=context.businessDate;speak('How was today? Please confirm your total customer payments, including cash, card and transfer. Your daily target is four thousand lei.');}
+ },[context,voice,speak,monitoringError]);
+ async function send(text:string){
+  if(inFlight.current||!text.trim())return;
+  inFlight.current=true;setBusy(true);setNotice('');
+  try{const result=await api('chat','POST',{id:crypto.randomUUID(),message:text});setMessage('');await refresh();if(voice)speak(result.reply.reply);}
+  catch(error){setNotice(error instanceof Error?error.message:'Chat failed.');}
+  finally{inFlight.current=false;setBusy(false);}
+ }
+ useEffect(()=>{
+  const observed=context?.observation?.fetchedAt;
+  if(!automatic||!context?.aiConfigured||!observed||busy||inFlight.current||Date.now()-Date.parse(observed)>15*60000)return;
+  if(lastAnalysis.current===observed||history.some(e=>e.observation_at===observed&&e.user_message===analysisRequest&&e.state==='completed'))return;
+  lastAnalysis.current=observed;void send(analysisRequest);
+ },[automatic,context,history,busy]);
+ async function saveCheckin(){
+  if(!/^\d{1,6}(?:[.,]\d{1,2})?$/.test(amount)||!confirmed){setNotice('Enter customer payments in lei and confirm the total.');return;}
+  const [whole,fraction='']=amount.replace(',','.').split('.'),amountBani=Number(whole)*100+Number(fraction.padEnd(2,'0'));
+  setBusy(true);try{await api('checkin','POST',{date:checkDate||context?.businessDate,amountBani,confirmed:true});setConfirmed(false);await refresh();setNotice('Customer payments confirmed. Advertising allowance uses the previous day only.');}
+  catch(error){setNotice(error instanceof Error?error.message:'Check-in failed.');}finally{setBusy(false);}
+ }
+ return <section className="agent-panel" aria-labelledby="agent-heading"><div className="agent-heading"><div><div className="eyebrow">GSMWEB AI ADVISOR</div><h2 id="agent-heading">Discuss your account</h2><p>Monitoring and advice first. You decide when account control may be granted.</p></div><span className="badge">ADVISE MODE</span></div>
+  {notice&&<p role="status" className="agent-notice">{notice}</p>}
+  <div className="agent-actions"><button className="secondary" onClick={()=>{if(!voice){if(!('speechSynthesis' in window)){setNotice('This browser cannot play spoken warnings. Text alerts remain available.');return;}speak('Voice warnings are enabled while this dashboard is open.');setVoice(true);}else{window.speechSynthesis?.cancel();setVoice(false);}}}>{voice?'Mute voice':'Enable voice warnings'}</button><button className="secondary" onClick={()=>setControlReview(v=>!v)}>Give account control</button></div>
+  <p className="agent-small">Voice is computer-generated by your browser. Keep this page open and allow audio. Closed or suspended pages cannot deliver reliable warnings.</p>
+  {controlReview&&<div className="agent-review"><h3>Review account control</h3><p>Daily allowance: 10% of yesterday’s confirmed customer payments, capped at 400 lei. Agent-led pauses: maximum 10 minutes, with independent recovery required.</p><p>The account stays in advice mode until these checks pass:</p><ul>{(context?.control.blockers??['Connect agent storage and reporting first.']).map(b=><li key={b}>{b}</li>)}</ul><button className="primary" disabled>Enable full control — setup incomplete</button><p>You have not granted control. Chat messages cannot activate it.</p></div>}
+  <div className="agent-goals"><div><small>Daily customer payment target</small><strong>4,000 lei</strong></div><div><small>Today’s allowed ad spend</small><strong>{context?.allowance.allowanceBani===null||!context?'Unconfirmed':`${(context.allowance.allowanceBani/100).toFixed(2)} lei`}</strong><small>Based on yesterday · hard policy cap 400 lei</small></div><div><small>Today’s confirmed payments</small><strong>{context?.today?`${(context.today.amountBani/100).toFixed(2)} lei`:'Awaiting your check-in'}</strong><small>{context?.today?context.today.targetReached?'Daily target reached':`${(context.today.gapBani/100).toFixed(2)} lei to goal`:'Owner-confirmed total; not CRM profit'}</small></div></div>
+  {!!context?.alerts.length&&<div className="agent-alerts" role="alert">{context.alerts.map(alert=><p key={alert.key}><strong>{alert.level==='critical'?'Urgent':'Attention'}:</strong> {alert.message}</p>)}</div>}
+  <div className="agent-checkin"><h3>{context?.checkinDue?'How was today?':'Daily customer payments'}</h3><p>At 19:00 Bucharest time, I’ll ask for all customer payments, including cash, card and transfer. While the dashboard is open, the prompt appears automatically.</p><p>Below 500: very bad · 500–999.99: bad · 1,000–1,999.99: good · 2,000+: very good.</p><label>Day <select value={checkDate||context?.businessDate||''} onChange={e=>{setCheckDate(e.target.value);setConfirmed(false);}}>{context&&<><option value={context.businessDate}>Today ({context.businessDate})</option><option value={context.yesterday}>Yesterday ({context.yesterday})</option></>}</select></label><label> Customer payments (lei) <input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);setConfirmed(false);}} placeholder="e.g. 4000"/></label><label className="agent-confirm"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>I confirm this total includes all customer payments for the selected day.</label><button className="secondary" disabled={busy||!confirmed||!context} onClick={saveCheckin}>Confirm daily payments</button><p className="agent-small">A correction is saved as a new record. Today’s check-in changes tomorrow’s allowance, never today’s.</p></div>
+  <label className="agent-confirm"><input type="checkbox" checked={automatic} onChange={e=>setAutomatic(e.target.checked)} disabled={!context?.aiConfigured}/>Automatically analyze new reports while this dashboard is open</label>
+  {!context?.aiConfigured&&<p>AI chat requires the server OpenAI key and an advisor model. No simulated AI replies are shown.</p>}
+  <div className="agent-chat" aria-live="polite">{history.length===0&&<p>Ask what is driving costs, how to improve search visibility, or what evidence is needed before changing a campaign.</p>}{history.map(exchange=><article key={exchange.id}><p><strong>You:</strong> {exchange.user_message}</p>{exchange.assistant_reply?<div><p><strong>GSMWEB advisor:</strong> {exchange.assistant_reply.reply}</p><details><summary>Evidence and recommendation · {exchange.assistant_reply.confidence} confidence</summary><ul>{exchange.assistant_reply.evidence.map((e,i)=><li key={i}>{e}</li>)}</ul><p><strong>Recommendation:</strong> {exchange.assistant_reply.recommendation}</p><p><strong>Expected impact:</strong> {exchange.assistant_reply.expectedImpact}</p><p><strong>Risks:</strong> {exchange.assistant_reply.risks}</p><p><strong>Missing data:</strong> {exchange.assistant_reply.missingData.join('; ')||'None reported'}</p></details><button className="text-btn" onClick={()=>speak(exchange.assistant_reply!.reply)}>Read aloud</button></div>:<p>{exchange.state==='pending'?'Analysis in progress…':'This request failed. Send a new message to retry.'}</p>}</article>)}</div>
+  <form onSubmit={e=>{e.preventDefault();void send(message);}}><label htmlFor="agent-message">Message your advisor</label><textarea id="agent-message" value={message} maxLength={4000} onChange={e=>setMessage(e.target.value)} placeholder="What would you improve first, and why?"/><div className="agent-actions"><button className="primary" disabled={busy||!context?.aiConfigured||!message.trim()}>{busy?'Analyzing…':'Send message'}</button><button type="button" className="secondary" disabled={busy||!context?.aiConfigured} onClick={()=>void send(analysisRequest)}>Analyze latest report</button></div></form>
+  <p className="agent-small">Recommendations show evidence and a concise explanation. They do not execute changes. Google’s reported spend can lag actual spend; no zero-risk or exact intraday billing guarantee is possible.</p>
+ </section>;
+}
