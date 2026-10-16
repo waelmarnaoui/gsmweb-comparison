@@ -1,0 +1,34 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {normalizeInventory,defaultInventoryRules} from '../lib/ai-ads/inventory';
+import {generateRepairDraft} from '../lib/ai-ads/policy';
+import {buildStockSnapshot} from '../lib/ai-ads/monitor';
+import {advertisingPartType,restrictedCopy,validHeadline,headlineFallback,insertionPreview} from '../lib/ai-ads/copy-rules';
+const now=Date.parse('2026-10-16T12:00:00Z'),project='dmjunqbncyrinykbbmfk';
+function part(type:string){return normalizeInventory(project,[{id:'p',name:'Recorded part',sku:'s',brand:null,partCode:null,partType:type,compatibleModels:['Samsung Galaxy S23'],modelId:null,category:'PART',quality:'used',active:true,minStock:1,recommendedPrice:100,updatedAt:new Date(now).toISOString()}],[{id:'l',productId:'p',quantityAvailable:3,unitCost:50,costIncludesVat:null,updatedAt:new Date(now).toISOString()}],[],defaultInventoryRules,now)[0];}
+test('only display, battery and charging-port stock qualifies for advertising',()=>{
+ for(const type of ['display','battery','charging-port'])assert.equal(part(type).eligible,true);
+ for(const type of ['speaker','microphone','adhesive','camera-glass','custom-sticla-display-oca','back-cover','motherboard','other']){assert.equal(part(type).eligible,false);assert.ok(part(type).reasons.includes('outside_advertising_part_types'));}
+ assert.equal(advertisingPartType('Display'),'display');assert.equal(advertisingPartType('charging_port'),null);
+});
+test('all three part families prepare 15 unique valid headlines and 3 keyword-insertion assets per variant',()=>{
+ for(const type of ['display','battery','charging-port']){
+  const draft=generateRepairDraft(part(type),'https://gsmweb.site/',now);assert.equal(draft.headlines.length,15);assert.equal(draft.descriptions.length,4);
+  for(const variant of draft.variants!){assert.equal(variant.headlines.length,15);assert.equal(new Set(variant.headlines.map(headlineFallback)).size,15);assert.equal(variant.headlines.filter(text=>text.includes('{KeyWord:')).length,3);assert.ok(variant.headlines.every(validHeadline));assert.ok(variant.descriptions.every(text=>text.length<=90&&!restrictedCopy(text)));}
+  assert.ok(draft.keywords.length>0);assert.ok(draft.keywords.every(keyword=>!restrictedCopy(keyword.text)&&keyword.text.includes('Samsung Galaxy S23')));assert.ok(draft.policy.issues.some(issue=>issue.code==='keyword_insertion_scope'));
+ }
+});
+test('restricted terms are detected across accents, case and punctuation',()=>{
+ for(const text of ['service gsm','SERVICE-GSM','reparatii telefoane','Reparații Telefoane','reparatie','REPARAȚIE','reparația'])assert.equal(restrictedCopy(text),true);
+ for(const text of ['Inlocuire Baterie','Montaj Port Incarcare','GSMWEB'])assert.equal(restrictedCopy(text),false);
+});
+test('keyword insertion uses a reviewed keyword when it fits and a valid fallback otherwise',()=>{
+ assert.equal(insertionPreview('GSMWEB {KeyWord:Display}','display Samsung S23'),'GSMWEB display Samsung S23');
+ assert.equal(insertionPreview('GSMWEB {KeyWord:Display}','inlocuire display Samsung Galaxy S23 Ultra'),'GSMWEB Display');
+ assert.throws(()=>insertionPreview('{KeyWord:Display}','reparatie Samsung'));assert.equal(validHeadline('{Display Samsung}'),false);
+});
+test('small-part stock does not create drafts or advertising stock alerts',()=>{
+ const old=part('speaker'),before=buildStockSnapshot({sourceProject:project,complete:true,parts:[old]},null,now);
+ const changed={...old,available:0,fingerprint:'changed',observedAt:new Date(now+60000).toISOString()};
+ const after=buildStockSnapshot({sourceProject:project,complete:true,parts:[changed]},before,now+60000);assert.equal(after.summary.parts,0);assert.equal(after.drafts.length,0);assert.equal(after.events.length,0);
+});

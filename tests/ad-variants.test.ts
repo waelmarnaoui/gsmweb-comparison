@@ -2,12 +2,13 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {prepareCopyVariants,nextCopyStep} from '../lib/ai-ads/variants';
 import {normalizeInventory,defaultInventoryRules} from '../lib/ai-ads/inventory';
+import {validHeadline,restrictedCopy} from '../lib/ai-ads/copy-rules';
 const now=Date.parse('2026-10-16T12:00:00Z');
 const part=normalizeInventory('dmjunqbncyrinykbbmfk',[{id:'p',name:'Recorded display',sku:'s',brand:null,partCode:null,partType:'display',compatibleModels:['Recorded Model'],modelId:null,category:'PART',quality:'used',active:true,minStock:1,recommendedPrice:100,updatedAt:new Date(now).toISOString()}],[{id:'l',productId:'p',quantityAvailable:3,unitCost:50,costIncludesVat:null,updatedAt:new Date(now).toISOString()}],[],defaultInventoryRules,now)[0];
 const base={feedback:null,attempts:0,internalHighRisk:false,stockCurrent:true,scopeApproved:true};
 test('three bounded factual variants have stable identities and no fabricated approval',()=>{
  const variants=prepareCopyVariants(part);assert.equal(variants.length,3);assert.equal(new Set(variants.map(v=>v.id)).size,3);assert.deepEqual(prepareCopyVariants(part),variants);
- for(const variant of variants){assert.equal(variant.googleReview,'NOT_SUBMITTED');assert.equal(variant.inventoryFingerprint,part.fingerprint);assert.ok(variant.headlines.length>=3);assert.ok(variant.headlines.every(t=>Array.from(t).length<=30));assert.ok(variant.descriptions.every(t=>Array.from(t).length<=90));assert.ok(!JSON.stringify(variant).includes('warranty'));}
+ for(const variant of variants){assert.equal(variant.googleReview,'NOT_SUBMITTED');assert.equal(variant.inventoryFingerprint,part.fingerprint);assert.equal(variant.headlines.length,15);assert.ok(variant.headlines.every(validHeadline));assert.ok(variant.descriptions.every(t=>Array.from(t).length<=90&&!restrictedCopy(t)));assert.ok(!JSON.stringify(variant).includes('warranty'));}
  assert.throws(()=>prepareCopyVariants({...part,eligible:false}));
 });
 test('high internal policy risk stops copy changes even after owner approval',()=>{
