@@ -1,25 +1,30 @@
 import 'server-only';
+import {unstable_cache} from 'next/cache';
 import {service} from './server';
-import {clickSheetSource,readSheetCells} from './sheets';
-import {fxDay,usableFx,validateGoogleSheetRate,type DailyFx} from './ads-fx';
+import {fxDay,usableFx,type DailyFx} from './ads-fx';
+import {fetchGoogleFinanceQuote} from './google-finance-quote';
+
+// Only public data enters the cache. A new business date creates a new key.
+// Keep legacy database rows' original Sheets provenance unchanged.
+const publicQuote=unstable_cache(async(date:string)=>{
+ const quote=await fetchGoogleFinanceQuote();
+ if(quote.date!==date)throw new Error('Business day changed during quote collection.');
+ return quote;
+},['gsmweb-google-finance-usd-ron-v1'],{revalidate:false});
+
 export async function dailyGoogleFx(accountId:string,currency:string,now=Date.now()):Promise<{rate:DailyFx|null;notice:string|null}>{
  if(currency==='RON')return {rate:null,notice:null};
  if(currency!=='USD')return {rate:null,notice:'Google currency conversion currently supports USD to RON only.'};
- const unavailable='Google daily exchange rate is unavailable. In the connected click spreadsheet, add tab FX: A1 = USD/RON; B1 = =GOOGLEFINANCE("CURRENCY:USDRON"). Lei comparisons stay unavailable until a valid rate is read.';
  try{
-  const db=service(),date=fxDay(now);
-  const cached=await db.from('ga_ads_daily_fx').select('rate,rate_date,captured_at').eq('account_id',accountId).eq('rate_date',date).maybeSingle();
-  if(cached.error)return {rate:null,notice:'Install the Google daily exchange-rate migration before enabling lei comparisons.'};
-  const decode=(row:{rate:unknown;rate_date:string;captured_at:string}):DailyFx=>({source:'google_finance_sheet',date:row.rate_date,rate:Number(row.rate),capturedAt:row.captured_at,quoteAt:null});
-  if(cached.data){const rate=decode(cached.data);return usableFx(rate,now)?{rate,notice:null}:{rate:null,notice:unavailable};}
-  const source=await clickSheetSource();
-  const [values,formulas]=await Promise.all([readSheetCells("'FX'!A1:B1",'UNFORMATTED_VALUE',source),readSheetCells("'FX'!A1:B1",'FORMULA',source)]);
-  const rate=validateGoogleSheetRate(values,formulas);
-  // One immutable capture per Bucharest business day. Concurrent callers use the winning row.
-  const saved=await db.from('ga_ads_daily_fx').upsert({account_id:accountId,rate_date:date,rate,captured_at:new Date(now).toISOString()},{onConflict:'account_id,rate_date',ignoreDuplicates:true});
-  if(saved.error)return {rate:null,notice:'Could not save today’s Google exchange rate. Lei comparisons remain unavailable.'};
-  const winner=await db.from('ga_ads_daily_fx').select('rate,rate_date,captured_at').eq('account_id',accountId).eq('rate_date',date).single();
-  if(winner.error)return {rate:null,notice:unavailable};
-  const result=decode(winner.data);return usableFx(result,now)?{rate:result,notice:null}:{rate:null,notice:unavailable};
- }catch{return {rate:null,notice:unavailable};}
+  const cached=await service().from('ga_ads_daily_fx').select('rate,rate_date,captured_at').eq('account_id',accountId).eq('rate_date',fxDay(now)).maybeSingle();
+  if(cached.data&&!cached.error){
+   const rate:DailyFx={source:'google_finance_sheet',date:cached.data.rate_date,rate:Number(cached.data.rate),capturedAt:cached.data.captured_at,quoteAt:null};
+   if(usableFx(rate,now))return {rate,notice:null};
+  }
+ }catch{/* Legacy storage is optional for the independent public quote read. */}
+ try{
+  const rate=await publicQuote(fxDay(now));
+  if(usableFx(rate,now))return {rate,notice:null};
+ }catch{/* Fail closed: never substitute a guessed rate or another provider. */}
+ return {rate:null,notice:'Google Finance USD/RON is temporarily unavailable or its quote could not be verified. The app retries automatically; no spreadsheet or browser sign-in is required. Lei comparisons remain unavailable until a valid quote is read.'};
 }

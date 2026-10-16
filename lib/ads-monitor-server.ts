@@ -3,6 +3,18 @@ import {connectionToken} from './connections';
 import {createAdsObserver} from './ads-monitor';
 import {service} from './server';
 import {IntegrationError} from './integration-error';
+import {createAdsRefreshGate} from './ads-refresh';
+
+const refreshGate=createAdsRefreshGate();
+export async function refreshAdsObservation(){
+ const account=process.env.GOOGLE_ADS_CUSTOMER_ID;
+ if(!account)return {refreshError:'Google Ads reporting account is not configured.'};
+ return refreshGate(account,async()=>{
+  const {data,error}=await service().from('ga_ads_observations').select('observation').eq('account_id',account).order('slot',{ascending:false}).limit(1).maybeSingle();
+  if(error)throw new IntegrationError('Observation storage is unavailable. Install the reviewed observation migration.',503);
+  return typeof data?.observation?.fetchedAt==='string'?data.observation.fetchedAt:null;
+ },collectAdsObservation);
+}
 
 export async function collectAdsObservation(){
  const accountId=process.env.GOOGLE_ADS_CUSTOMER_ID;
