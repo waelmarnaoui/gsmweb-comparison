@@ -41,7 +41,7 @@ export function monitoringAlerts(current:AdsObservation|null,previous:AdsObserva
  return alerts;
 }
 export function controlReadiness(dailySpendRon:number|null){
- const blockers=['Live campaign execution, rollback and independent pause recovery are not implemented or verified.','Paid-customer CPA requires verified attribution; visibility safeguards need a data-backed proposal and your approval.','New consumer repair ads require policy clearance; approval cannot override a policy restriction.'];
+ const blockers=['Open Account control to review stock-control permissions, approved actions and deployed recovery-worker health. Unrestricted account optimization is not enabled.','Paid-customer CPA requires verified attribution; visibility safeguards need a data-backed proposal and your approval.','New consumer repair ads require policy clearance; approval cannot override a policy restriction.'];
  if(dailySpendRon===null||!Number.isFinite(dailySpendRon)||dailySpendRon<=0)blockers.unshift('Confirm positive customer payments for yesterday before granting account control.');
  return {mode:'ADVISE' as const,canEnable:false as const,maxPauseSeconds:600,blockers};
 }

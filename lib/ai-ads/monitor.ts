@@ -36,7 +36,7 @@ export function stockAdvisorEvidence(state:ReturnType<typeof stockMonitorState>)
  return {available:!!state.snapshot,reliable:state.reliable,stale:state.stale,lastAttemptFailed:state.lastAttemptFailed,observedAt:state.snapshot?.observedAt??null,publicationBlocked:true,
   summary:state.snapshot?.summary??null,
   stockQualifiedSamples:state.reliable?(state.snapshot?.parts??[]).filter(part=>part.eligible&&part.category==='PART'&&advertisingPartType(part.partType)).slice(0,20).map(part=>({partType:part.partType,models:part.models.slice(0,5),condition:part.quality,available:part.available,minimumStock:part.minimumStock})):[],
-  limitations:['Samples are bounded, not the entire stock.','Stock is not demand, repair capacity, a repair quote or profit.','No product-to-live-ad mapping or stock-triggered Ads change is confirmed.','Third-party consumer repair publication is policy-blocked.']};
+  limitations:['Samples are bounded, not the entire stock.','Stock is not demand, repair capacity, a repair quote or profit.','This stock snapshot alone does not establish a live-ad mapping or confirm an account change. Check Account control.','Third-party consumer repair publication is policy-blocked.']};
 }
 export function stockWorkStatus(state:ReturnType<typeof stockMonitorState>){
  return {state:state.reliable?'active' as const:state.snapshot?'stale' as const:'unavailable' as const,
