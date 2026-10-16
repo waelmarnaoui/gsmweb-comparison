@@ -2,6 +2,7 @@ import 'server-only';
 import {crmClient,getConnection} from '../connections';
 import {normalizeInventory,defaultInventoryRules,type ProductRow,type LotRow,type ModelRow,type InventoryRules} from './inventory';
 import {IntegrationError} from '../integration-error';
+import {InventorySourceError,inventoryDiagnostic} from './source-diagnostic';
 // Explicit project supplied by the owner; project identifiers are not credentials.
 export const inventoryProjectRef='dmjunqbncyrinykbbmfk';
 export async function inventorySourceStatus(){
@@ -10,14 +11,15 @@ export async function inventorySourceStatus(){
 }
 export async function readRepairInventory(rules:InventoryRules=defaultInventoryRules){
  const readStartedAt=Date.now();
- const source=await inventorySourceStatus();if(!source.projectMatches)throw new IntegrationError('Select the owner-confirmed inventory project in the existing CRM connection first.',503);
- const client=await crmClient();if(!client)throw new IntegrationError('The saved server-side inventory connection is unavailable.',503);
+ let source,client;
+ try{source=await inventorySourceStatus();if(!source.projectMatches)throw new Error('Project mismatch');client=await crmClient();if(!client)throw new Error('Connection unavailable');}
+ catch{throw new InventorySourceError({code:'connection',table:null,action:'Reconnect the CRM integration to the owner-confirmed stock project dmjunqbncyrinykbbmfk and verify server-side project read access.'});}
  const deadline=AbortSignal.timeout(20000);
  async function rows(table:string,columns:string){
   const result:Record<string,unknown>[]=[];
   for(let offset=0;offset<20000;offset+=500){
    const {data,error}=await client!.from(table).select(columns).order('id').range(offset,offset+499).abortSignal(deadline);
-   if(error)throw new IntegrationError(`Cannot read the expected inventory fields in ${table}. The live schema and source permissions need verification. No partial inventory was accepted.`,503);
+   if(error)throw new InventorySourceError(inventoryDiagnostic(error.code,table,deadline.aborted));
    result.push(...(data??[]) as unknown as Record<string,unknown>[]);if((data??[]).length<500)return result;
   }
   throw new IntegrationError('Inventory pagination limit reached. No partial stock totals were accepted.',503);
