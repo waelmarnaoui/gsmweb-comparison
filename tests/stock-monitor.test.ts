@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {normalizeInventory,defaultInventoryRules,type ProductRow,type LotRow} from '../lib/ai-ads/inventory';
-import {buildStockSnapshot,stockSnapshotFresh,stockMonitorState,stockAdvisorEvidence} from '../lib/ai-ads/monitor';
+import {buildStockSnapshot,stockSnapshotFresh,stockMonitorState,stockAdvisorEvidence,stockWorkStatus} from '../lib/ai-ads/monitor';
 import {ownerFixedFx,ronValue,usableFx,observationInRon} from '../lib/ads-fx';
 const now=Date.parse('2026-10-16T12:00:00Z'),project='dmjunqbncyrinykbbmfk';
 const product:ProductRow={id:'p1',name:'Recorded display',sku:'SKU1',brand:'Recorded',partCode:null,partType:'display',compatibleModels:['Recorded Model'],modelId:null,category:'PART',quality:'used',active:true,minStock:1,recommendedPrice:'150.00',updatedAt:new Date(now).toISOString()};
@@ -41,4 +41,11 @@ test('advisor receives bounded stock facts without costs, credentials or custome
  const snapshot=buildStockSnapshot(source(),null,now),run={status:'complete' as const,snapshot,created_at:new Date(now).toISOString(),error_code:null};
  const evidence=stockAdvisorEvidence(stockMonitorState(run,run,now));assert.equal(evidence.stockQualifiedSamples.length,1);assert.deepEqual(evidence.stockQualifiedSamples[0].models,['Recorded Model']);assert.equal(evidence.publicationBlocked,true);assert.ok(!JSON.stringify(evidence).includes('weightedUnitCostBani'));
  assert.equal(stockAdvisorEvidence(stockMonitorState(run,run,now+300000)).stockQualifiedSamples.length,0);
+});
+test('agent reports active stock work only after a fresh successful collection',()=>{
+ const snapshot=buildStockSnapshot(source(),null,now),run={status:'complete' as const,snapshot,created_at:new Date(now).toISOString(),error_code:null};
+ assert.equal(stockWorkStatus(stockMonitorState(null,null,now)).state,'unavailable');
+ const active=stockWorkStatus(stockMonitorState(run,run,now));assert.equal(active.state,'active');assert.equal(active.qualifiedParts,1);assert.equal(active.draftCount,1);
+ assert.equal(stockWorkStatus(stockMonitorState(run,run,now+300000)).state,'stale');
+ const failure={...run,status:'failed' as const,error_code:'inventory_read_failed',snapshot:null};assert.equal(stockWorkStatus(stockMonitorState(failure,run,now)).state,'stale');
 });

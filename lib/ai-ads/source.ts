@@ -12,10 +12,11 @@ export async function readRepairInventory(rules:InventoryRules=defaultInventoryR
  const readStartedAt=Date.now();
  const source=await inventorySourceStatus();if(!source.projectMatches)throw new IntegrationError('Select the owner-confirmed inventory project in the existing CRM connection first.',503);
  const client=await crmClient();if(!client)throw new IntegrationError('The saved server-side inventory connection is unavailable.',503);
+ const deadline=AbortSignal.timeout(20000);
  async function rows(table:string,columns:string){
   const result:Record<string,unknown>[]=[];
   for(let offset=0;offset<20000;offset+=500){
-   const {data,error}=await client!.from(table).select(columns).order('id').range(offset,offset+499);
+   const {data,error}=await client!.from(table).select(columns).order('id').range(offset,offset+499).abortSignal(deadline);
    if(error)throw new IntegrationError(`Cannot read the expected inventory fields in ${table}. The live schema and source permissions need verification. No partial inventory was accepted.`,503);
    result.push(...(data??[]) as unknown as Record<string,unknown>[]);if((data??[]).length<500)return result;
   }
