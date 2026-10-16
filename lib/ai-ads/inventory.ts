@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {advertisingPartType,restrictedCopy} from './copy-rules';
 export type ProductRow={id:string;name:string;sku:string;brand:string|null;partCode:string|null;partType:string|null;compatibleModels:string[];modelId:string|null;category:string;quality:string|null;active:boolean;minStock:number;recommendedPrice:string|number;updatedAt:string};
 export type LotRow={id:string;productId:string;quantityAvailable:number;unitCost:string|number;costIncludesVat:boolean|null;updatedAt:string};
 export type ModelRow={id:string;name:string;brand:string};
@@ -28,10 +29,12 @@ export function normalizeInventory(project:string,products:ProductRow[],lots:Lot
   if(!rules.netAvailabilityConfirmed)reasons.push('reservation_semantics_unverified');
   if(p.active!==true)reasons.push('inventory_inactive');
   if(p.category!=='PART')reasons.push('outside_repair_parts_scope');
+  if(!advertisingPartType(p.partType))reasons.push('outside_advertising_part_types');
   if(!validText(p.id)||!validText(p.name)||!validText(p.sku)||!validText(p.partType))reasons.push('essential_part_information_missing');
   const model=modelMap.get(p.modelId??''),names=[...(Array.isArray(p.compatibleModels)?p.compatibleModels:[]),...(model&&validText(model.name)?[model.name]:[])];
   const verifiedModels=[...new Set(names.filter(s=>validText(s,100)).map(s=>s.trim()))].sort();
   if(!verifiedModels.length)reasons.push('compatible_model_missing');
+  if(verifiedModels.some(model=>restrictedCopy(model)||/[{}]/.test(model)))reasons.push('ad_copy_source_requires_review');
   if(!Number.isFinite(Date.parse(p.updatedAt))||Date.parse(p.updatedAt)>now+60000||ownLots.some(l=>!Number.isFinite(Date.parse(l.updatedAt))||Date.parse(l.updatedAt)>now+60000))reasons.push('source_timestamp_invalid');
   // Preserve recorded costs; mixed or unknown VAT bases cannot support a reliable average.
   const positive=ownLots.filter(l=>l.quantityAvailable>0),costs=positive.map(l=>moneyBani(l.unitCost));
