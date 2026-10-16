@@ -6,4 +6,6 @@ test('inventory diagnostics distinguish schema, access and timeout without raw p
  assert.equal(inventoryDiagnostic('PGRST205','private secret table').table,null);
  const diagnostic=safeInventoryFailure(new Error('private credential data'));assert.ok(!JSON.stringify(diagnostic).includes('private credential'));
  const known=inventoryDiagnostic('42703','InventoryLot');assert.deepEqual(safeInventoryFailure(new InventorySourceError(known)),known);
+ assert.equal(safeInventoryFailure(new Error('Snapshot size limit.')).code,'snapshot_limit');assert.equal(safeInventoryFailure(new Error('Invalid inventory configuration.')).code,'invalid_configuration');
+ assert.equal(safeInventoryFailure(new Error('Inventory changed during collection or contains orphan lots. Refresh before making decisions.')).code,'orphan_lots');
 });

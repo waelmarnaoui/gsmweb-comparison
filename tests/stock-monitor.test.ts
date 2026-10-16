@@ -8,7 +8,7 @@ const product:ProductRow={id:'p1',name:'Recorded display',sku:'SKU1',brand:'Reco
 const lot:LotRow={id:'l1',productId:'p1',quantityAvailable:3,unitCost:'50.00',costIncludesVat:null,updatedAt:product.updatedAt};
 function source(quantity=3,time=now){return {sourceProject:project,complete:true,parts:normalizeInventory(project,[product],[{...lot,quantityAvailable:quantity}],[],defaultInventoryRules,time)};}
 test('first complete run prepares blocked stock-specific drafts with evidence',()=>{
- const run=buildStockSnapshot(source(),null,now);assert.equal(run.summary.stockQualified,1);assert.equal(run.drafts.length,1);assert.equal(run.drafts[0].stockAtGeneration,3);assert.equal(run.drafts[0].policy.publishAllowed,false);assert.equal(run.drafts[0].repairPriceBani,null);assert.equal(run.drafts[0].landingUrl,null);assert.equal(run.events.length,0);
+ const run=buildStockSnapshot(source(),null,now);assert.equal(run.summary.stockQualified,1);assert.equal(run.drafts.length,1);assert.equal(run.drafts[0].stockAtGeneration,3);assert.equal(run.drafts[0].policy.publishAllowed,false);assert.equal(run.drafts[0].repairPriceBani,null);assert.equal(run.drafts[0].landingUrl,'https://gsmweb.site/');assert.ok(run.drafts[0].policy.issues.some(issue=>issue.code==='destination_review_required'));assert.equal(run.events.length,0);
 });
 test('stock depletion removes drafts and records a review event without claiming an ad pause',()=>{
  const before=buildStockSnapshot(source(),null,now),after=buildStockSnapshot(source(0,now+60000),before,now+60000);
