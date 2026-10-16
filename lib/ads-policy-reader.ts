@@ -1,4 +1,5 @@
 import {ADS_REPORTING_VERSION} from './ads-monitor';
+import {ControlProviderError,safeGoogleCodes} from './ads-control/google';
 export type AdPolicyRecord={resourceName:string;campaignId:string;adGroupId:string;adId:string;status:string;approvalStatus:string;reviewStatus:string;topics:{topic:string;type:string}[];headlines:string[];descriptions:string[]};
 export type AdPolicyReport={accountId:string;fetchedAt:string;ads:AdPolicyRecord[];source:'google_ads_api';complete:true};
 type Options={accountId:string;loginCustomerId?:string;developerToken?:string;token:()=>Promise<string>;fetcher?:typeof fetch;now?:()=>number};
@@ -14,7 +15,7 @@ export function createAdPolicyReader(options:Options){
     body:JSON.stringify({query:"SELECT campaign.id, ad_group.id, ad_group_ad.resource_name, ad_group_ad.status, ad_group_ad.ad.id, ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions, ad_group_ad.policy_summary.approval_status, ad_group_ad.policy_summary.review_status, ad_group_ad.policy_summary.policy_topic_entries FROM ad_group_ad WHERE campaign.status != 'REMOVED' AND ad_group.status != 'REMOVED' AND ad_group_ad.status != 'REMOVED' AND ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD'",...(pageToken?{pageToken}:{})}),
     cache:'no-store',redirect:'error',signal:AbortSignal.any([deadline,AbortSignal.timeout(15000)])
    });
-   if(!response.ok)throw new Error(`Google policy reporting failed (${response.status}). Check reporting authorization.`);
+   if(!response.ok){let body:unknown;try{body=await response.json();}catch{}throw new ControlProviderError('google_policy_read_rejected',false,safeGoogleCodes(body),response.status);}
    const data=await response.json();if(data.error||data.partialFailureError||data.results!==undefined&&!Array.isArray(data.results))throw new Error('Incomplete Google policy report.');
    for(const row of data.results??[]){
     const item=row.adGroupAd,ad=item?.ad,summary=item?.policySummary,resource=item?.resourceName,campaignId=String(row.campaign?.id??''),adGroupId=String(row.adGroup?.id??''),adId=String(ad?.id??'');

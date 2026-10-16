@@ -4,11 +4,14 @@ import {readControl,controlResources,setControl,linkProduct,unlinkProduct,propos
 import {refreshAdsObservation} from '@/lib/ads-monitor-server';
 import {createLaptopPairing} from '@/lib/ads-control/pairing-server';
 import {cancelAction} from '@/lib/ads-control/server';
+import {ControlProviderError} from '@/lib/ads-control/google';
+import {resourceReadError} from '@/lib/ads-control/resource-loader';
+const controlError=(error:unknown)=>error instanceof ControlProviderError?Response.json({error:resourceReadError(error)},{status:503}):apiError(error);
 export const maxDuration=120;
 export async function GET(request:Request){try{
  await requireAdmin();
  return Response.json(new URL(request.url).searchParams.get('resources')==='1'?await controlResources():await readControl(),{headers:{'Cache-Control':'no-store'}});
-}catch(error){return apiError(error);}}
+}catch(error){return controlError(error);}}
 export async function POST(request:Request){try{
  const {user}=await requireAdmin();sameOrigin(request);
  if(Number(request.headers.get('content-length')??0)>5000)throw new Error('Request too large.');
@@ -37,4 +40,4 @@ export async function POST(request:Request){try{
   default:throw new Error('Unsupported control request.');
  }
  return Response.json({saved:true});
-}catch(error){return apiError(error);}}
+}catch(error){return controlError(error);}}

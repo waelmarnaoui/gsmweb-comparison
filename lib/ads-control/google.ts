@@ -1,18 +1,27 @@
 import {ADS_REPORTING_VERSION} from '../ads-monitor';
 import {resourceFor,actionKey,type Kind} from './rules';
-export class ControlProviderError extends Error{constructor(public readonly code:string,public readonly uncertain=false){super(code);}}
+export class ControlProviderError extends Error{constructor(public readonly code:string,public readonly uncertain=false,public readonly diagnostics:string[]=[],public readonly httpStatus?:number){super(code);}}
+export function safeGoogleCodes(body:unknown){
+ const data=body as {error?:{status?:unknown;details?:{errors?:{errorCode?:Record<string,unknown>}[]}[]}};
+ const codes=new Set<string>(),add=(v:unknown)=>{if(typeof v==='string'&&/^[A-Z][A-Z0-9_]{1,79}$/.test(v))codes.add(v);};
+ add(data?.error?.status);
+ for(const detail of Array.isArray(data?.error?.details)?data.error.details.slice(0,10):[])for(const error of Array.isArray(detail?.errors)?detail.errors.slice(0,10):[]){
+  for(const key of ['queryError','authenticationError','authorizationError','requestError','quotaError','internalError','fieldError'])add(error?.errorCode?.[key]);
+ }
+ return [...codes].slice(0,8);
+}
 export type ResourceState={value:string;campaignId:string;approvalStatus?:string;reviewStatus?:string;topics?:number;budgetShared?:boolean;evidenceHash?:string};
 export type ControlGoogle={read:(kind:Kind,resource:string)=>Promise<ResourceState>;mutate:(kind:Kind,resource:string,value:string,validateOnly?:boolean)=>Promise<{requestId:string|null}>};
 type Options={accountId:string;developerToken:string;loginCustomerId?:string;token:()=>Promise<string>;fetcher?:typeof fetch};
-export type ControlCampaign={resourceName:string;name:string;status:string;budgetResource:string;budgetMicros:string;shared:boolean};
+export type ControlCampaign={resourceName:string;name:string;status:string;budgetResource:string|null;budgetMicros:string|null;budgetEditable:boolean;shared:boolean};
 export function createControlGoogle(o:Options):ControlGoogle&{campaigns:()=>Promise<ControlCampaign[]>}{
  resourceFor('campaign_pause',o.accountId,`customers/${o.accountId}/campaigns/1`);
- if(!o.developerToken||o.loginCustomerId&&!/^\d{10}$/.test(o.loginCustomerId))throw new Error('Google Ads control configuration is incomplete.');
+ if(!o.developerToken||o.loginCustomerId&&!/^\d{10}$/.test(o.loginCustomerId))throw new ControlProviderError('google_control_configuration_missing');
  async function request(path:string,body:unknown,writing=false){
   const token=await o.token();let response:Response;
   try{response=await(o.fetcher??fetch)(`https://googleads.googleapis.com/${ADS_REPORTING_VERSION}/customers/${o.accountId}/${path}`,{method:'POST',headers:{Authorization:'Bearer '+token,'developer-token':o.developerToken,'Content-Type':'application/json',...(o.loginCustomerId?{'login-customer-id':o.loginCustomerId}:{})},body:JSON.stringify(body),cache:'no-store',redirect:'error',signal:AbortSignal.timeout(12000)});}
   catch{throw new ControlProviderError('google_transport_failed',writing);}
-  if(!response.ok)throw new ControlProviderError(response.status===429?'google_rate_limited':response.status>=500?'google_unavailable':'google_request_rejected',writing&&response.status>=500);
+  if(!response.ok){let body:unknown;try{body=await response.json();}catch{}throw new ControlProviderError(response.status===429?'google_rate_limited':response.status>=500?'google_unavailable':'google_request_rejected',writing&&response.status>=500,safeGoogleCodes(body),response.status);}
   let data;try{data=await response.json();}catch{throw new ControlProviderError('google_response_invalid',writing);}
   if(data.error||data.partialFailureError)throw new ControlProviderError('google_operation_rejected',writing);
   return {data,requestId:response.headers.get('request-id')};
@@ -23,10 +32,13 @@ export function createControlGoogle(o:Options):ControlGoogle&{campaigns:()=>Prom
    if(data.nextPageToken||data.results!==undefined&&!Array.isArray(data.results)||(data.results?.length??0)>1000)throw new ControlProviderError('campaign_scope_incomplete');
    const seen=new Set<string>();
    return (data.results??[]).map((row:{campaign?:{resourceName?:string;name?:string;status?:string;campaignBudget?:string};campaignBudget?:{amountMicros?:string;explicitlyShared?:boolean;referenceCount?:string}})=>{
-    const c=row.campaign,b=row.campaignBudget;if(!c?.resourceName||!c.campaignBudget||!b?.amountMicros||seen.has(c.resourceName))throw new ControlProviderError('campaign_scope_incomplete');
-    resourceFor('campaign_pause',o.accountId,c.resourceName);resourceFor('budget_decrease',o.accountId,c.campaignBudget);seen.add(c.resourceName);
-    if(!/^[1-9]\d{0,14}$/.test(b.amountMicros)||!['PAUSED','ENABLED'].includes(c.status??''))throw new ControlProviderError('campaign_scope_incomplete');
-    return {resourceName:c.resourceName,name:String(c.name??''),status:c.status!,budgetResource:c.campaignBudget,budgetMicros:b.amountMicros,shared:b.explicitlyShared===true||String(b.referenceCount)!=='1'};
+    const c=row.campaign,b=row.campaignBudget;if(!c?.resourceName||seen.has(c.resourceName))throw new ControlProviderError('campaign_scope_incomplete');
+    resourceFor('campaign_pause',o.accountId,c.resourceName);if(c.campaignBudget)resourceFor('budget_decrease',o.accountId,c.campaignBudget);seen.add(c.resourceName);
+    if(!['PAUSED','ENABLED'].includes(c.status??''))throw new ControlProviderError('campaign_scope_incomplete');
+    const amount=b?.amountMicros===undefined?null:String(b.amountMicros);
+    if(amount!==null&&!/^\d{1,15}$/.test(amount))throw new ControlProviderError('campaign_budget_invalid');
+    const shared=b?.explicitlyShared===true||String(b?.referenceCount)!=='1';
+    return {resourceName:c.resourceName,name:String(c.name??''),status:c.status!,budgetResource:c.campaignBudget??null,budgetMicros:amount,budgetEditable:!!c.campaignBudget&&amount!==null&&BigInt(amount)>0n&&!shared,shared};
    });
   },
   async read(kind,resource){
