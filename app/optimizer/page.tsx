@@ -24,7 +24,7 @@ export default function Optimizer(){
  const observation=report?.observation;
  const percent=(value:number|null)=>value===null?'Unavailable / below reporting precision':`${(value*100).toFixed(1)}%`;
  return <div className="setup-page"><header className="setup-header"><a href="/" className="secondary">Dashboard</a><strong>GSMWeb</strong><a href="/connections" className="secondary">Connections</a></header>
-  <main className="setup-main"><div className="eyebrow">GOOGLE ADS · MONITOR AND ADVISE</div><h1>Your GSMWEB agent</h1><p>Target: <strong>3 RON per click</strong>. Account control stays off until you explicitly grant it and deployment checks pass.</p><AdsAgent/>
+  <main className="setup-main"><div className="eyebrow">GOOGLE ADS · MONITOR AND ADVISE</div><h1>Your GSMWEB agent</h1><p><a href="/ai-ads">AI Ads Manager — inventory audit</a></p><p>Target: <strong>3 RON per click</strong>. Account control stays off until you explicitly grant it and deployment checks pass.</p><AdsAgent/>
   <div className="setup-actions"><button className="primary" disabled={busy} onClick={()=>run(async()=>{const result=await api('/api/integrations/google_ads_management/start','POST');window.location.assign(result.url);})}>Connect campaign reporting</button>
    <button className="secondary" disabled={busy} onClick={()=>run(async()=>{await api('/api/optimizer/collect','POST');await refresh();setNotice('Report collected.');})}>{busy?'Working…':'Collect report'}</button>
    <button className="secondary" disabled={busy} onClick={()=>run(refresh)}>Refresh saved report</button>
