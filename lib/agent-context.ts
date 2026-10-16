@@ -3,6 +3,8 @@ import {service} from './server';
 import {businessDay,previousBusinessDate,receiptsSummary,earnedAdAllowance,monitoringAlerts,controlReadiness} from './agent-policy';
 import type {AdsObservation} from './ads-monitor';
 import {IntegrationError} from './integration-error';
+import {dailyGoogleFx} from './ads-fx-server';
+import {observationInRon} from './ads-fx';
 export function agentAccount(){
  const account=process.env.GOOGLE_ADS_CUSTOMER_ID;
  if(!account||!/^\d{10}$/.test(account))throw new IntegrationError('Set the verified reporting account in server settings.',503);
@@ -19,10 +21,12 @@ export async function readAgentContext(now=Date.now()){
  const previous=(snapshots.data?.[1]?.observation??null) as AdsObservation|null;
  const today=checkins.data?.find(row=>row.business_date===business.date),prior=checkins.data?.find(row=>row.business_date===yesterday);
  const allowance=earnedAdAllowance(prior?Number(prior.amount_bani):null),dailySpendRon=allowance.allowanceBani===null?null:allowance.allowanceBani/100;
+ const fx=await dailyGoogleFx(account,observation?.currency??'RON',now);
+ const converted=observationInRon(observation,fx.rate,now),convertedPrevious=observationInRon(previous,fx.rate,now);
  return {accountId:account,businessDate:business.date,yesterday,checkinDue:business.checkinDue&&!today,
   today:today?{...receiptsSummary(Number(today.amount_bani)),source:today.source,confirmedAt:today.created_at}:null,
   yesterdayPaymentsBani:prior?Number(prior.amount_bani):null,allowance,
-  control:controlReadiness(dailySpendRon),alerts:monitoringAlerts(observation,previous,observation?.today?.date===business.date?dailySpendRon:null,now),observation,
+  control:controlReadiness(dailySpendRon),alerts:monitoringAlerts(converted??observation,convertedPrevious,observation?.today?.date===business.date?dailySpendRon:null,now).filter(a=>!(converted&&a.key==='currency')),observation,fx,ronObservation:converted,
   aiConfigured:Boolean(process.env.OPENAI_API_KEY&&process.env.OPENAI_ADVISOR_MODEL),
-  limitations:['Customer payments are owner-confirmed totals, not automatically reconciled CRM profit.','Google reporting is delayed; five-minute checks do not provide five-minute source freshness.','CPA and contribution profit are unavailable until payment attribution is reconciled.']};
+  limitations:['Customer payments are owner-confirmed totals, not automatically reconciled CRM profit.','Google reporting is delayed; five-minute checks do not provide five-minute source freshness.','CPA and contribution profit are unavailable until payment attribution is reconciled.','Google exchange conversions are estimates; today’s captured rate is not a historical daily rate or bank billing rate.']};
 }
