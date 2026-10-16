@@ -20,7 +20,7 @@ async function token(){
  if(typeof data.access_token!=='string'||!data.access_token||!Number.isFinite(data.expires_in)||data.expires_in<=60)throw new Error('Recovery OAuth failed.');
  cached={sealed:r.data.encrypted_credentials,token:data.access_token,expires:Date.now()+data.expires_in*1000};return data.access_token;
 }
-const google=createControlGoogle({accountId:account,developerToken:required('GOOGLE_ADS_DEVELOPER_TOKEN'),loginCustomerId:process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID,token});
+const google=createControlGoogle({accountId:account,developerToken:process.env.GOOGLE_ADS_DEVELOPER_TOKEN,loginCustomerId:process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID,token});
 const engine=createControlEngine({store:controlStore(db),google,preflight:async()=>{throw new Error('Recovery workers cannot execute new actions.');},recoveryHealthy:async()=>false});
 const canary=required('ADS_CONTROL_RECOVERY_CANARY_CAMPAIGN_ID');if(!/^\d{1,20}$/.test(canary))throw new Error('Recovery canary is invalid.');
 let stopping=false;process.on('SIGTERM',()=>{stopping=true;});process.on('SIGINT',()=>{stopping=true;});

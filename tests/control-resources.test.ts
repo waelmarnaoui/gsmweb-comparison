@@ -21,3 +21,10 @@ test('Google diagnostics retain only enum codes, never messages, triggers or arb
  const body={error:{status:'INVALID_ARGUMENT',message:'SECRET_VALUE',details:[{errors:[{errorCode:{queryError:'UNRECOGNIZED_FIELD'},message:'SECRET_VALUE',trigger:{stringValue:'SECRET_VALUE'}},{errorCode:{authorizationError:'CUSTOMER_NOT_ENABLED',unknown:'SECRET_VALUE'}}]}]}};
  assert.deepEqual(safeGoogleCodes(body),['INVALID_ARGUMENT','UNRECOGNIZED_FIELD','CUSTOMER_NOT_ENABLED']);assert.equal(resourceReadError(new Error('SECRET_VALUE')).includes('SECRET_VALUE'),false);
 });
+test('Cloud-project OAuth can read campaigns and validate recovery without a deprecated developer token',async()=>{
+ const headers:Headers[]=[];
+ const api=createControlGoogle({accountId:'2050434247',token:async()=>'test-oauth',fetcher:async(url,init)=>{headers.push(new Headers(init?.headers));return Response.json(String(url).includes('googleAds:search')?{results:[]}:{});}});
+ assert.deepEqual(await api.campaigns(),[]);await api.mutate('campaign_pause','customers/2050434247/campaigns/1','PAUSED',true);
+ assert.equal(headers.length,2);for(const h of headers){assert.equal(h.get('authorization'),'Bearer test-oauth');assert.equal(h.has('developer-token'),false);}
+ assert.throws(()=>createControlGoogle({accountId:'2050434247',loginCustomerId:'bad-manager',token:async()=>'test'}),/google_manager_account_invalid/);
+});

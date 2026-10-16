@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useState} from 'react';
 import type {ControlCampaign} from '@/lib/ads-control/google';
-export default function LaptopRecovery({campaigns,ready,createCode}:{campaigns:ControlCampaign[];ready:boolean;createCode:(id:string)=>Promise<{setupCode:string;expiresInMinutes:number}>}){
+export default function LaptopRecovery({campaigns,ready,createCode}:{campaigns:Pick<ControlCampaign,'resourceName'|'name'>[];ready:boolean;createCode:(id:string)=>Promise<{setupCode:string;expiresInMinutes:number}>}){
  const [campaign,setCampaign]=useState(''),[code,setCode]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
  useEffect(()=>{if(!code)return;const timeout=setTimeout(()=>{setCode('');setNotice('Setup code expired. Generate another if the laptop is not paired.');},600000);return()=>clearTimeout(timeout);},[code]);
  async function pair(){setBusy(true);setNotice('');setCode('');try{const result=await createCode(campaign.split('/').pop()!);setCode(result.setupCode);}catch(e){setNotice(e instanceof Error?e.message:'Laptop setup is unavailable.');}finally{setBusy(false);}}
