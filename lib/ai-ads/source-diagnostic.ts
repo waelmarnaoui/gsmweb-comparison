@@ -1,5 +1,5 @@
 import {IntegrationError} from '../integration-error';
-export type InventoryDiagnostic={code:'connection'|'missing_table'|'missing_column'|'access_denied'|'timeout'|'invalid_data'|'unknown';table:string|null;action:string};
+export type InventoryDiagnostic={code:'connection'|'missing_table'|'missing_column'|'access_denied'|'timeout'|'invalid_data'|'unknown'|'source_limit'|'source_changed'|'duplicate_identity'|'orphan_lots'|'snapshot_limit'|'invalid_configuration';table:string|null;action:string};
 export class InventorySourceError extends IntegrationError{
  constructor(public readonly diagnostic:InventoryDiagnostic){super(diagnostic.action,503);}
 }
@@ -14,5 +14,11 @@ export function inventoryDiagnostic(code:unknown,table:unknown=null,timedOut=fal
 }
 export function safeInventoryFailure(error:unknown):InventoryDiagnostic{
  if(error instanceof InventorySourceError)return error.diagnostic;
+ const message=error instanceof Error?error.message:'';
+ if(message==='Snapshot size limit.')return {code:'snapshot_limit',table:null,action:'The received-stock snapshot exceeds the 6 MB storage limit. No partial snapshot was stored.'};
+ if(message==='Invalid inventory configuration.')return {code:'invalid_configuration',table:null,action:'The inventory project or monitoring configuration is invalid. Verify the server adapter configuration.'};
+ if(message.startsWith('Duplicate inventory identities;'))return {code:'duplicate_identity',table:null,action:'Duplicate inventory identities were found. No stock quantities were combined.'};
+ if(message.startsWith('Inventory changed during collection or contains orphan lots.'))return {code:'orphan_lots',table:'InventoryLot',action:'Lots reference products outside the complete read. Retry and verify source permissions.'};
+ if(message==='Stock read is stale.'||message==='Incomplete or inconsistent stock source.')return {code:'source_changed',table:null,action:'Stock evidence changed or expired during collection. Retry a complete read.'};
  return inventoryDiagnostic(null);
 }

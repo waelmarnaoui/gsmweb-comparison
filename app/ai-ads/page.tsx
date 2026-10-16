@@ -2,6 +2,7 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import type {StockSnapshot} from '@/lib/ai-ads/monitor';
 import AdPolicyReview from '@/components/ad-policy-review';
+import {gsmwebLocalPlan} from '@/lib/ai-ads/business-profile';
 type Monitor={snapshot:StockSnapshot|null;stale:boolean;reliable:boolean;lastAttemptFailed:boolean;lastAttemptAt:string|null;executionEnabled:false;mode:string;diagnostic?:{code:string;table:string|null;action:string}|null};
 export default function AiAdsManager(){
  const [monitor,setMonitor]=useState<Monitor|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[query,setQuery]=useState(''),[page,setPage]=useState(0),[voice,setVoice]=useState(false),[voiceNotice,setVoiceNotice]=useState('');
@@ -31,6 +32,7 @@ export default function AiAdsManager(){
  return <div className="setup-page"><header className="setup-header"><a href="/" className="secondary">Dashboard</a><strong>GSMWEB</strong><a href="/optimizer" className="secondary">Ads monitoring and chat</a></header>
  <main className="setup-main"><h1>AI Ads Manager</h1><p>Monitor parts available for repairs in your store and review stock-based advertising drafts.</p>
  <section className="setup-provider"><h2>Monitor and prepare drafts</h2><p>No campaigns are published, paused, re-enabled or given extra budget by this module. Google’s third-party consumer technical-support policy includes offline hardware repair. Publication remains blocked pending policy clarification and your approval.</p><a href="https://support.google.com/adspolicy/answer/13527027?hl=en" target="_blank" rel="noreferrer">Read the official policy</a></section>
+ <section className="setup-provider"><h2>Your local campaign brief</h2><p><a href={gsmwebLocalPlan.website} target="_blank" rel="noreferrer">gsmweb.site</a> · {gsmwebLocalPlan.address}</p><p>Focus: {gsmwebLocalPlan.targetArea}. Proposed location matching: people in or regularly in the selected area, rather than interest-only searches from elsewhere.</p><p>Exact Google location boundaries and any radius are not yet verified or applied. Top placement and the lowest cost cannot both be guaranteed. The 3 lei CPC is a goal, not an auction guarantee.</p><p>Website hours: {gsmwebLocalPlan.websiteHours}. Confirm these before an ad schedule is activated.</p></section>
  <AdPolicyReview/>
  <div className="setup-actions"><button className="primary" disabled={busy} onClick={()=>void refresh()}>{busy?'Checking stock…':'Refresh stock'}</button><button className="secondary" onClick={()=>{
   if(!('speechSynthesis' in window)){setVoiceNotice('This browser cannot play voice warnings. Text alerts remain available.');return;}
@@ -43,7 +45,7 @@ export default function AiAdsManager(){
  {snapshot&&<>
  <p role="status">{reliable?'Current stock checks passed.':'Current availability is unconfirmed.'} Last successful read: {new Date(snapshot.observedAt).toLocaleString()}. Source: {snapshot.sourceProject}.</p>
  <p><strong>{snapshot.summary.stockQualified}</strong> stock-qualified parts · {snapshot.summary.outOfStock} out of stock · {snapshot.summary.lowStock} below the minimum · {snapshot.summary.parts} parts checked.</p>
- <p>Saved repair allocations are already deducted from available stock. This read does not reserve parts. Part prices are not repair quotes; stock depth does not establish demand, profit or advertising eligibility.</p>
+ <p>Monitoring covers products with recorded stock lots, including depleted lots. Catalogue templates with no received lots are outside this read and cannot generate ads. Saved repair allocations are already deducted from available stock. This read does not reserve parts. Part prices are not repair quotes; stock depth does not establish demand, profit or advertising eligibility.</p>
  <section><h2>Changes since the previous successful read</h2>{snapshot.events.length===0?<p>No changes were found, or this is the first successful snapshot.</p>:<ul>{snapshot.events.map(event=><li key={event.id}><strong>{event.name}</strong>: {event.before??'Unknown'} → {event.after??'Unknown'}. {event.message}</li>)}</ul>}</section>
  <section><h2>Parts and availability</h2><label>Find a part or model <input value={query} maxLength={120} onChange={event=>{setQuery(event.target.value);setPage(0);}}/></label>
  <div className="table-scroll"><table><caption>Recorded stock and verified compatibility</caption><thead><tr><th>Part</th><th>Models recorded</th><th>Available</th><th>Minimum</th><th>Stock checks</th></tr></thead><tbody>{parts.slice(currentPage*100,(currentPage+1)*100).map(part=><tr key={part.id}><td>{part.name}<small>{part.sku}</small></td><td>{part.models.join(', ')||'Unknown'}</td><td>{part.available??'Unknown'}</td><td>{part.minimumStock}</td><td>{part.eligible?'Stock qualified':part.reasons.join(', ')}</td></tr>)}</tbody></table></div>

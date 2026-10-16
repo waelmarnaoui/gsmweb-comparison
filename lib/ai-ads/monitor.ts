@@ -1,5 +1,6 @@
 import {digest,inventorySafeguard,type InventoryPart} from './inventory';
 import {generateRepairDraft,type RepairDraft} from './policy';
+import {gsmwebLocalPlan} from './business-profile';
 export const STOCK_MONITOR_INTERVAL_MS=300000;
 export type StockEvent={id:string;productId:string;name:string;kind:'unavailable'|'restocked'|'changed';message:string;before:number|null;after:number|null};
 export type StockSnapshot={version:1;sourceProject:string;observedAt:string;complete:true;parts:InventoryPart[];drafts:RepairDraft[];draftsOmitted:number;events:StockEvent[];summary:{products:number;parts:number;stockQualified:number;outOfStock:number;lowStock:number};};
@@ -19,7 +20,7 @@ export function buildStockSnapshot(source:{sourceProject:string;complete:boolean
  }
  const qualified=source.parts.filter(p=>p.category==='PART'&&p.eligible).sort((a,b)=>(b.available??0)-(a.available??0)||a.id.localeCompare(b.id));
  // Stock depth is a preparation order only, not a claim about demand or profit.
- const drafts=qualified.slice(0,50).map(p=>generateRepairDraft(p,null,now));
+ const drafts=qualified.slice(0,50).map(p=>generateRepairDraft(p,gsmwebLocalPlan.website,now));
  const observedAt=source.parts.reduce((stamp,part)=>Math.min(stamp,Date.parse(part.observedAt)),now);
  return {version:1,sourceProject:source.sourceProject,observedAt:new Date(observedAt).toISOString(),complete:true,parts:source.parts,drafts,draftsOmitted:Math.max(0,qualified.length-drafts.length),events,
   summary:{products:source.parts.length,parts:source.parts.filter(p=>p.category==='PART').length,stockQualified:qualified.length,outOfStock:source.parts.filter(p=>p.category==='PART'&&p.reasons.includes('out_of_stock')).length,lowStock:source.parts.filter(p=>p.category==='PART'&&p.reasons.includes('below_minimum_stock')).length}};
