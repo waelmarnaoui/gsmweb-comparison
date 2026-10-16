@@ -13,6 +13,7 @@ import {CONTROL_VERSION,actionKey,validAction,recent,recoveryReady,stockControlR
 import {IntegrationError} from '../integration-error';
 import {readRepairInventory} from '../ai-ads/source';
 import type {AgentAlert} from '../agent-policy';
+import {loadControlResources} from './resource-loader';
 const safeError=(message:string)=>new IntegrationError(message,503);
 const monitorDeployment=(settings:{recovery_deployment_id?:string|null})=>process.env.ADS_CONTROL_MONITOR_DEPLOYMENT_ID??settings.recovery_deployment_id??'dashboard';
 export function controlGoogle(){return createControlGoogle({accountId:agentAccount(),developerToken:process.env.GOOGLE_ADS_DEVELOPER_TOKEN??'',loginCustomerId:process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID,token:async()=>(await connectionToken('google_ads_management')).token});}
@@ -42,8 +43,12 @@ export async function readControl(){
 }
 export async function controlResources(){
  const accountId=agentAccount();
- const report=await createAdPolicyReader({accountId,developerToken:process.env.GOOGLE_ADS_DEVELOPER_TOKEN,loginCustomerId:process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID,token:async()=>(await connectionToken('google_ads_management')).token}).collect();
- return {ads:report.ads,campaigns:await controlGoogle().campaigns(),fetchedAt:report.fetchedAt};
+ const result=await loadControlResources(()=>createAdPolicyReader({accountId,developerToken:process.env.GOOGLE_ADS_DEVELOPER_TOKEN,loginCustomerId:process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID,token:async()=>(await connectionToken('google_ads_management')).token}).collect(),()=>controlGoogle().campaigns());
+ if(result.errors.length){
+  // Error strings are produced by the safe loader; no provider body is stored.
+  await service().from('ga_audit').insert({actor:null,action:'read_failed',entity:'google_ads_control_resources',record_id:accountId,details:{adsComplete:result.adsComplete,campaignsComplete:result.campaignsComplete,errors:result.errors}});
+ }
+ return result;
 }
 export async function setControl(actor:string,input:{enabled?:boolean;paused?:boolean}){
  const {db,account}=await setupControl();
@@ -142,7 +147,8 @@ export async function runStockControlTick(interactive=false,registeredDeployment
  const mappings=await db.from('ga_ads_product_ads').select('*').eq('account_id',account).eq('active',true).limit(1001);if(mappings.error||(mappings.data?.length??0)>1000)throw safeError('Stock mapping read failed or exceeded its limit.');
  let changed=0,failures=0;const google=controlGoogle(),engine=serverControlEngine();
  // Bound each invocation; unprocessed mappings remain eligible on the next tick.
- const live=await controlResources(),enabled=new Set(live.ads.filter(a=>a.status==='ENABLED').map(a=>a.resourceName));
+ const live=await controlResources();if(!live.adsComplete)throw safeError('Live ad monitoring failed. No stock-related change is confirmed.');
+ const enabled=new Set(live.ads.filter(a=>a.status==='ENABLED').map(a=>a.resourceName));
  const candidates=(mappings.data as Mapping[]).filter(m=>enabled.has(m.resource_name)&&stockNeedsPause(m,stock.snapshot?.parts.find(p=>p.id===m.product_id)));
  for(const m of candidates.slice(0,5)){
   const part=stock.snapshot!.parts.find(p=>p.id===m.product_id),fingerprint=part?.fingerprint??actionKey({missing:m.product_id});
