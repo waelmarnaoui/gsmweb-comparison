@@ -16,7 +16,7 @@ export function normalizeInventory(project:string,products:ProductRow[],lots:Lot
  if(!/^[a-z0-9]{20}$/.test(project)||!Number.isFinite(now)||!Number.isSafeInteger(rules.maxSnapshotAgeSeconds)||rules.maxSnapshotAgeSeconds<30||rules.maxSnapshotAgeSeconds>3600)throw new Error('Invalid inventory configuration.');
  if(new Set(products.map(p=>p.id)).size!==products.length||new Set(lots.map(p=>p.id)).size!==lots.length||new Set(models.map(p=>p.id)).size!==models.length)throw new Error('Duplicate inventory identities; no partial stock totals are accepted.');
  const known=new Set(products.map(p=>p.id));if(lots.some(lot=>!known.has(lot.productId)))throw new Error('Inventory changed during collection or contains orphan lots. Refresh before making decisions.');
- const lotGroups=new Map<string,LotRow[]>();for(const lot of lots)lotGroups.set(lot.productId,[...(lotGroups.get(lot.productId)??[]),lot]);
+ const lotGroups=new Map<string,LotRow[]>();for(const lot of lots){const group=lotGroups.get(lot.productId);if(group)group.push(lot);else lotGroups.set(lot.productId,[lot]);}
  const modelMap=new Map(models.map(m=>[m.id,m]));
  return products.map(p=>{
   const reasons:string[]=[],categoryMinimum=rules.minimumStock[p.category];

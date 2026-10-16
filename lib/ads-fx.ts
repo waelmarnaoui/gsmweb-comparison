@@ -1,5 +1,7 @@
 import type {AdsObservation} from './ads-monitor';
-export type DailyFx={source:'google_finance_sheet'|'google_finance_public';date:string;rate:number;capturedAt:string;quoteAt:string|null};
+export const OWNER_FIXED_USD_RON=4.74;
+export type DailyFx={source:'google_finance_sheet'|'google_finance_public'|'owner_fixed';date:string;rate:number;capturedAt:string;quoteAt:string|null};
+export function ownerFixedFx(now=Date.now()):DailyFx{return {source:'owner_fixed',date:fxDay(now),rate:OWNER_FIXED_USD_RON,capturedAt:new Date(now).toISOString(),quoteAt:null};}
 export function fxDay(now:number){
  const parts=new Intl.DateTimeFormat('en-US',{timeZone:'Europe/Bucharest',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now);
  const part=(name:string)=>parts.find(p=>p.type===name)!.value;return `${part('year')}-${part('month')}-${part('day')}`;
@@ -12,7 +14,7 @@ export function validateGoogleSheetRate(values:unknown[][],formulas:unknown[][])
  return value;
 }
 export function usableFx(fx:DailyFx|null,now=Date.now()){
- return !!fx&&(fx.source==='google_finance_sheet'||fx.source==='google_finance_public')&&
+ return !!fx&&(fx.source==='google_finance_sheet'||fx.source==='google_finance_public'||(fx.source==='owner_fixed'&&fx.rate===OWNER_FIXED_USD_RON))&&
   (fx.source!=='google_finance_public'||(fx.quoteAt!==null&&Number.isFinite(Date.parse(fx.quoteAt))&&Date.parse(fx.quoteAt)<=now+60000&&now-Date.parse(fx.quoteAt)<=4*86400000))&&fx.date===fxDay(now)&&Number.isFinite(fx.rate)&&fx.rate>0&&fx.rate<=100&&
   Number.isFinite(Date.parse(fx.capturedAt))&&fxDay(Date.parse(fx.capturedAt))===fx.date&&Date.parse(fx.capturedAt)<=now+60000&&now-Date.parse(fx.capturedAt)<=26*3600000;
 }

@@ -9,6 +9,7 @@ export async function inventorySourceStatus(){
  return {expectedProject:inventoryProjectRef,selectedProject:saved?.metadata.project_ref??null,connectionSaved:!!saved,projectMatches:saved?.metadata.project_ref===inventoryProjectRef};
 }
 export async function readRepairInventory(rules:InventoryRules=defaultInventoryRules){
+ const readStartedAt=Date.now();
  const source=await inventorySourceStatus();if(!source.projectMatches)throw new IntegrationError('Select the owner-confirmed inventory project in the existing CRM connection first.',503);
  const client=await crmClient();if(!client)throw new IntegrationError('The saved server-side inventory connection is unavailable.',503);
  async function rows(table:string,columns:string){
@@ -25,6 +26,6 @@ export async function readRepairInventory(rules:InventoryRules=defaultInventoryR
   rows('InventoryLot','id,productId,quantityAvailable,unitCost,costIncludesVat,updatedAt'),
   rows('DeviceModel','id,name,brand')
  ]);
- const parts=normalizeInventory(inventoryProjectRef,products as unknown as ProductRow[],lots as unknown as LotRow[],models as unknown as ModelRow[],rules);
+ const parts=normalizeInventory(inventoryProjectRef,products as unknown as ProductRow[],lots as unknown as LotRow[],models as unknown as ModelRow[],rules,readStartedAt);
  return {sourceProject:inventoryProjectRef,parts,complete:true,consistency:'multi-query; no stock reservation or transactional locking',counts:{products:products.length,lots:lots.length,models:models.length}};
 }
