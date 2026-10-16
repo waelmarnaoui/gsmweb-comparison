@@ -3,6 +3,8 @@ import {sameOrigin} from '@/lib/connections';
 import {readAgentContext,agentAccount} from '@/lib/agent-context';
 import {askAdvisor,type AdvisoryReply} from '@/lib/agent-model';
 import {IntegrationError} from '@/lib/integration-error';
+import {readStockMonitor} from '@/lib/ai-ads/monitor-server';
+import {stockAdvisorEvidence} from '@/lib/ai-ads/monitor';
 export async function GET(){try{
  const {user}=await requireAdmin();const account=agentAccount();
  const {data,error}=await service().from('ga_agent_exchanges').select('id,user_message,assistant_reply,state,created_at,observation_at').eq('account_id',account).eq('actor',user.id).order('created_at',{ascending:false}).limit(20);
@@ -25,7 +27,9 @@ export async function POST(request:Request){try{
   // Never send campaign names, arbitrary metadata, account IDs or request IDs to the model.
   const observation=context.observation;
   const redact=(data:typeof observation)=>data?{...data,accountId:undefined,requestIds:undefined,campaigns:data.campaigns.map(c=>({...c,name:undefined}))}:null;
-  const modelContext={...context,accountId:undefined,observation:redact(observation),ronObservation:redact(context.ronObservation)};
+  let stock:unknown={available:false,reliable:false,publicationBlocked:true,notice:'Stock monitoring has not been verified.'};
+  try{stock=stockAdvisorEvidence(await readStockMonitor());}catch{/* Missing stock setup must remain unknown without disabling account chat. */}
+  const modelContext={...context,stock,accountId:undefined,observation:redact(observation),ronObservation:redact(context.ronObservation)};
   const reply=await askAdvisor({key,model,message:body.message.trim(),context:modelContext,history:(history??[]).reverse().flatMap(row=>[{role:'user' as const,content:row.user_message},{role:'assistant' as const,content:JSON.stringify(row.assistant_reply as AdvisoryReply)}])});
   const saved=await db.from('ga_agent_exchanges').update({assistant_reply:reply,state:'completed'}).eq('id',body.id).eq('actor',user.id).eq('state','pending').select('id');
   if(saved.error||saved.data?.length!==1)throw new Error('Could not save the AI reply.');
