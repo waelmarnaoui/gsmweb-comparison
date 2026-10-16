@@ -35,3 +35,8 @@ export function stockAdvisorEvidence(state:ReturnType<typeof stockMonitorState>)
   stockQualifiedSamples:state.reliable?(state.snapshot?.parts??[]).filter(part=>part.eligible&&part.category==='PART').slice(0,20).map(part=>({partType:part.partType,models:part.models.slice(0,5),condition:part.quality,available:part.available,minimumStock:part.minimumStock})):[],
   limitations:['Samples are bounded, not the entire stock.','Stock is not demand, repair capacity, a repair quote or profit.','No product-to-live-ad mapping or stock-triggered Ads change is confirmed.','Third-party consumer repair publication is policy-blocked.']};
 }
+export function stockWorkStatus(state:ReturnType<typeof stockMonitorState>){
+ return {state:state.reliable?'active' as const:state.snapshot?'stale' as const:'unavailable' as const,
+  observedAt:state.snapshot?.observedAt??null,qualifiedParts:state.snapshot?.summary.stockQualified??null,draftCount:state.snapshot?.drafts.length??null,
+  notice:state.lastAttemptFailed?'The latest stock read failed. Current availability is unconfirmed.':state.stale?'A successful current stock read is required.':null};
+}

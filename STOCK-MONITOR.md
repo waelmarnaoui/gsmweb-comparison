@@ -12,7 +12,9 @@ This extends the existing Next.js app and encrypted CRM connection. It does not 
 
 ## Implemented
 
-/ai-ads checks stock on load and every minute while visible. The server collects a complete snapshot when the previous one is five minutes old. It uses existing lot availability without deducting saved repair allocations a second time. A snapshot records stock, minimums, verified models, source fingerprints, part-price evidence and source timestamps. The collection start time limits freshness; a long read does not create fresh evidence from old data.
+/optimizer starts stock collection alongside Ads reporting when the authenticated agent panel loads, and repeats checks through its existing 30-second polling while visible. Its stock-work card shows actual success, stale evidence or failure separately from live account control. The stock-history table was confirmed installed, with no runs recorded yet at inspection time; this update does not claim a live collection has succeeded.
+
+/ai-ads also checks stock on load and every minute while visible. Both paths share the same server collector, which only collects a complete snapshot when the previous one is five minutes old. It uses existing lot availability without deducting saved repair allocations a second time. A snapshot records stock, minimums, verified models, source fingerprints, part-price evidence and source timestamps. The collection start time limits freshness; a long read does not create fresh evidence from old data. Source queries share a twenty-second deadline so an inaccessible inventory source does not wait indefinitely.
 
 The monitor compares consecutive successful snapshots, records changed/unavailable/restocked parts, and preserves the last successful result after a failed read while marking it unreliable. It never claims that a corresponding live ad exists or has been paused. No product-to-Google-ad mappings are configured in this stage.
 
