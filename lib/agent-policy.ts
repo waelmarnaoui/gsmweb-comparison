@@ -27,7 +27,7 @@ export function monitoringAlerts(current:AdsObservation|null,previous:AdsObserva
  if(!current||!Number.isFinite(Date.parse(current.fetchedAt))||now-Date.parse(current.fetchedAt)>15*60000||Date.parse(current.fetchedAt)>now+60000)
   return [{key:'stale',level:'warning',message:'Campaign monitoring is unavailable or stale. I cannot confirm the current account state.'}];
  const alerts:AgentAlert[]=[];
- if(current.currency!=='RON')alerts.push({key:'currency',level:'warning',message:'The account currency is not RON. I cannot compare spend with your lei targets without an agreed exchange rate.'});
+ if(current.currency!=='RON')alerts.push({key:'currency',level:'warning',message:'A valid daily Google exchange rate is unavailable for this account currency. Lei comparisons and spend-limit warnings are unavailable until it loads.'});
  if(current.currency==='RON'&&current.today&&dailySpendRon!==null&&Number.isFinite(dailySpendRon)&&dailySpendRon>=0){
   const spend=Number(current.today.costMicros)/1e6;
   if((dailySpendRon===0&&spend>0)||(dailySpendRon>0&&spend>=dailySpendRon))alerts.push({key:`spend:${current.today.date}`,level:'critical',message:`Reported ad spend today is ${spend.toFixed(2)} lei, reaching your ${dailySpendRon.toFixed(2)} lei daily limit. Reporting can be delayed. Review spending now.`});

@@ -1,9 +1,10 @@
 'use client';
 import {useEffect,useState} from 'react';
-import type {AdsObservation} from '@/lib/ads-monitor';
+import type {AdsObservation,CampaignObservation} from '@/lib/ads-monitor';
+import type {DailyFx} from '@/lib/ads-fx';
 import AdsAgent from '@/components/ads-agent';
 import './agent.css';
-type Report={mode:string;stale?:boolean;notice?:string;observation:AdsObservation|null;blockers?:string[]};
+type Report={mode:string;stale?:boolean;notice?:string;fx?:{rate:DailyFx|null;notice:string|null};observation:(Omit<AdsObservation,'campaigns'>&{campaigns:(CampaignObservation&{spendRon:number|null;cpcRon:number|null})[]})|null;blockers?:string[]};
 export default function Optimizer(){
  const [report,setReport]=useState<Report|null>(null),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
  async function api(path:string,method='GET'){
@@ -36,10 +37,11 @@ export default function Optimizer(){
   {observation&&<><p>Account {observation.accountId} · {observation.currency} · {observation.timeZone}</p>
    <p>{observation.windowStart} to {observation.windowEnd} · Collected {new Date(observation.fetchedAt).toLocaleString()}{report?.stale?' · Stale: collect a new report':''}</p>
    <p>Seven completed account-calendar days. Recent results may still be revised by Google. Impression shares are estimates; no search placement is guaranteed.</p>
-   {observation.currency!=='RON'&&<p role="alert">Account currency is {observation.currency}. The 3 RON target cannot be compared without an agreed exchange-rate policy.</p>}
+   {report?.fx?.rate&&<p>Google Finance daily capture: 1 USD = {report.fx.rate.rate.toFixed(6)} RON · {report.fx.rate.date} · Captured {new Date(report.fx.rate.capturedAt).toLocaleString()}. Lei values are estimates using this rate, including the seven-day summary; source quote time is unavailable.</p>}
+   {report?.fx?.notice&&<p role="alert">{report.fx.notice}</p>}
    {observation.campaigns.length===0&&<p>No Search campaign activity was returned for this window. This does not prove there are no configured campaigns.</p>}
-   <div className="table-scroll"><table><caption>Search campaign performance in account currency</caption><thead><tr><th>Campaign</th><th>Strategy</th><th>Clicks</th><th>Spend</th><th>Cost / click</th><th>Search share</th><th>Top share</th><th>Absolute top share</th><th>Lost: budget</th><th>Lost: rank</th></tr></thead><tbody>
-   {observation.campaigns.map(c=><tr key={c.id}><td>{c.name}<small>{c.status}</small></td><td>{c.strategy}</td><td>{c.clicks}</td><td>{(Number(c.costMicros)/1e6).toFixed(2)} {observation.currency}</td><td>{c.clicks?(Number(c.costMicros)/1e6/c.clicks).toFixed(2):'No clicks'}</td><td>{percent(c.searchShare)}</td><td>{percent(c.topShare)}</td><td>{percent(c.absoluteTopShare)}</td><td>{percent(c.budgetLostShare)}</td><td>{percent(c.rankLostShare)}</td></tr>)}
+   <div className="table-scroll"><table><caption>Search campaign performance: original account currency and estimated lei</caption><thead><tr><th>Campaign</th><th>Strategy</th><th>Clicks</th><th>Spend</th><th>Cost / click</th><th>Spend in lei</th><th>CPC vs 3 lei</th><th>Search share</th><th>Top share</th><th>Absolute top share</th><th>Lost: budget</th><th>Lost: rank</th></tr></thead><tbody>
+   {observation.campaigns.map(c=><tr key={c.id}><td>{c.name}<small>{c.status}</small></td><td>{c.strategy}</td><td>{c.clicks}</td><td>{(Number(c.costMicros)/1e6).toFixed(2)} {observation.currency}</td><td>{c.clicks?(Number(c.costMicros)/1e6/c.clicks).toFixed(2):'No clicks'}</td><td>{c.spendRon===null?'Unavailable':`${c.spendRon.toFixed(2)} lei`}</td><td>{c.cpcRon===null?'Unavailable':`${c.cpcRon.toFixed(2)} lei · ${c.cpcRon>3?'Above target':'Within target'}`}</td><td>{percent(c.searchShare)}</td><td>{percent(c.topShare)}</td><td>{percent(c.absoluteTopShare)}</td><td>{percent(c.budgetLostShare)}</td><td>{percent(c.rankLostShare)}</td></tr>)}
    </tbody></table></div></>}
   </main></div>;
 }
