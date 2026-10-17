@@ -2,7 +2,7 @@ import {digest,inventorySafeguard,type InventoryPart} from './inventory';
 import {generateRepairDraft,type RepairDraft} from './policy';
 import {COPY_RULES_VERSION,validHeadline,safeKeyword} from './copy-rules';
 import {campaignOpen,type Opportunity,type SearchReport} from './search-growth';
-export type PublicationPlan={key:string;account:string;campaignId:string;groupName:string;model:string;partType:string;productId:string;stock:InventoryPart;draft:RepairDraft;keywords:string[];manualCpcMicros:string|null;copyRulesVersion:string;createdAt:string};
+export type PublicationPlan={key:string;account:string;campaignId:string;groupName:string;model:string;partType:string;productId:string;stock:InventoryPart;draft:RepairDraft;keywords:string[];manualCpcMicros:string|null;copyRulesVersion:string;createdAt:string;correction?:{parentId:string;attempt:1;topics:string[]}};
 export function publicationStockProblem(plan:PublicationPlan,part:InventoryPart|null,now=Date.now()){
  if(!part||!part.eligible||part.id!==plan.productId||part.sourceProject!==plan.stock.sourceProject||part.partType!==plan.partType||!part.models.includes(plan.model))return 'stock_unavailable';
  const age=now-Date.parse(part.observedAt);if(!Number.isFinite(age)||age< -60000||age>=300000)return 'stock_stale';
