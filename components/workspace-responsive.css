@@ -5,6 +5,10 @@
 .workspace-shell .main{margin:0;width:100%;min-width:0}
 .workspace-shell .main>header{display:none}
 .workspace-shell .main>main{max-width:1440px;padding:28px}
+.workspace-shell .advisor-connection>label{display:flex;flex-direction:column;gap:8px;margin:16px 0;font-size:12px;max-width:520px}
+.workspace-shell .advisor-connection input{display:block;width:100%;min-width:0;padding:11px;border:1px solid #bdcfd3;border-radius:5px;background:#fff;color:#314b54;min-height:44px}
+.workspace-shell .advisor-connection .agent-actions{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}
+.workspace-shell .advisor-connection .agent-actions>button{border:1px solid #bdcfd3;padding:10px 14px;border-radius:5px;min-height:44px}
 .workspace-shell p{color:#405963}
 .workspace-shell .workspace-top>span{color:#425c65}
 .workspace-shell .agent-panel{display:flex;flex-direction:column}

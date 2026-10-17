@@ -27,7 +27,7 @@ export async function POST(request:Request){try{
  if(typeof body.message!=='string'||!body.message.trim()||body.message.length>4000||typeof body.id!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(body.id))throw new Error('Invalid chat request.');
  try{sourceContent(body.message);}catch{throw new IntegrationError('Keep credentials out of chat. Use the secure connection form.',400);}
  const {key,model}=await advisorConfiguration();
- if(!key||!model)throw new IntegrationError('Add your Anthropic API key in AI settings on this dashboard to enable chat.',503);
+ if(!key||!model)throw new IntegrationError('Add your Gemini API key in AI settings on this dashboard to enable chat.',503);
  const context=await readAgentContext(),db=service();
  const attachmentNote=attachments.length?'\n[Attached: '+attachments.map(file=>file.name).join(', ')+'. Contents available for this turn only.]':'';
  const savedMessage=body.message.trim().slice(0,4000-attachmentNote.length)+attachmentNote;

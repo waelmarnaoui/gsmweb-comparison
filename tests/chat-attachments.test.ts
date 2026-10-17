@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {parseChatAttachments} from '../lib/chat-attachments';
 import {attachmentMessage,runActionAgent} from '../lib/action-agent-model';
+import {googleReply} from './google-fixture';
 const text=(value:string)=>({name:'notes.txt',mediaType:'text/plain',data:Buffer.from(value).toString('base64')});
 test('image, PDF and text bytes reach model as typed parts, not remote downloads',()=>{
  const image={name:'ad.png',mediaType:'image/png',data:Buffer.from([137,80,78,71,13,10,26,10,0]).toString('base64')};
@@ -15,6 +16,6 @@ test('reject secret text, MIME spoofing, excess files, invalid encoding and over
 test('actual provider request contains image bytes and untrusted attachment boundary',async()=>{
  let received=false;const png={name:'ad.png',mediaType:'image/png',data:Buffer.from([137,80,78,71,13,10,26,10,0]).toString('base64')};
  const output={reply:'Image reviewed.',evidence:[],recommendation:'Review policy.',expectedImpact:'Unknown',risks:'Unknown',confidence:'low',missingData:[]};
- const result=await runActionAgent({key:'TEST_NOT_REAL',model:'claude-sonnet-5',message:'Review my screenshot.',attachments:[png],context:{},history:[],tools:{},fetcher:async(_url,init)=>{const body=JSON.parse(String(init?.body));received=true;assert.ok(body.messages.some((message:any)=>message.content.some((part:any)=>part.type==='image'&&part.source.data===png.data)));assert.match(JSON.stringify(body.system),/untrusted evidence/);return Response.json({id:'msg_test',type:'message',role:'assistant',model:'claude-sonnet-5',content:[{type:'text',text:JSON.stringify(output)}],stop_reason:'end_turn',usage:{input_tokens:10,output_tokens:20}});}});
+ const result=await runActionAgent({key:'TEST_NOT_REAL',model:'gemini-3.8-flash',message:'Review my screenshot.',attachments:[png],context:{},history:[],tools:{},fetcher:async(_url,init)=>{const body=JSON.parse(String(init?.body));received=true;assert.ok(body.contents.some((message:any)=>message.parts.some((part:any)=>part.inlineData?.data===png.data&&part.inlineData.mimeType==='image/png')));assert.match(JSON.stringify(body.systemInstruction),/untrusted evidence/);return googleReply(output);}});
  assert.equal(received,true);assert.equal(result.reply,'Image reviewed.');
 });

@@ -1,23 +1,21 @@
 import 'server-only';
 import {getConnection,saveConnection} from './connections';
-import {advisorModel,advisorKey} from './advisor-settings';
+import {advisorModel,advisorKey,selectGeminiConfiguration} from './advisor-settings';
 import {IntegrationError} from './integration-error';
 import {askAdvisor} from './agent-model';
 import {service} from './server';
 export async function advisorConfiguration(){
- let saved;try{saved=await getConnection('ai_advisor');}catch{if(!process.env.ANTHROPIC_API_KEY)return {key:null,model:advisorModel(process.env.CLAUDE_ADVISOR_MODEL),source:'unavailable',configured:false};}
- const key=saved?.credentials.access_token||process.env.ANTHROPIC_API_KEY||null;
- const model=advisorModel(saved?.metadata.model||process.env.CLAUDE_ADVISOR_MODEL);
- return {key,model,source:saved?.credentials.access_token?'encrypted_app_settings':key?'server_environment':'missing_key',configured:!!key};
+ let saved;try{saved=await getConnection('ai_advisor');}catch{if(!process.env.GOOGLE_GENERATIVE_AI_API_KEY&&!process.env.GEMINI_API_KEY)return {...selectGeminiConfiguration(null,process.env),source:'unavailable'};}
+ return selectGeminiConfiguration(saved,process.env);
 }
-export async function advisorReadiness(){const {key:unused,...status}=await advisorConfiguration();void unused;return {...status,notice:status.configured?'AI is configured. A real API request is required to verify billing and model access.':'Add an Anthropic API key in AI settings. The advisor model has a default; no Vercel account access is needed.'};}
+export async function advisorReadiness(){const {key:unused,...status}=await advisorConfiguration();void unused;return {...status,notice:status.configured?'Gemini is configured. Test the connection to verify model access. Free quota depends on your Google project; billing-enabled projects may charge.':'Add a Gemini API key from Google AI Studio in AI settings. Previous Claude keys are not used. No paid provider fallback is enabled.'};}
 export async function configureAdvisor(actor:string,input:{apiKey?:unknown;model?:unknown;save:boolean}){
  const existing=await advisorConfiguration(),key=input.apiKey||existing.key,model=advisorModel(input.model??existing.model);
- if(!advisorKey(key))throw new IntegrationError('Enter a valid Anthropic API key in the secure settings form. Do not paste keys into chat.',400);
+ if(!advisorKey(key))throw new IntegrationError('Enter a valid Gemini API key in the secure settings form. Do not paste keys into chat.',400);
  // The connection test uses static configuration text, never customer records,
  // stock costs or advertising data. No provider secrets enter the model input.
  await askAdvisor({key,model,message:'Confirm that the AI advisor connection works. This is a connection test; do not analyze an advertising account.',context:{connectionTest:true},history:[]});
- if(input.save)await saveConnection('ai_advisor',{access_token:key,refresh_token:'',expires_at:0},{provider:'anthropic',model,verified_at:new Date().toISOString()},actor);
+ if(input.save)await saveConnection('ai_advisor',{access_token:key,refresh_token:'',expires_at:0},{provider:'google',model,verified_at:new Date().toISOString()},actor);
  return {...await advisorReadiness(),tested:true,testedModel:model,saved:input.save};
 }
 export async function recordAdvisorReadiness(account:string){
