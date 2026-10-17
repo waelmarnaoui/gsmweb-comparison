@@ -1,6 +1,14 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {askOllama,ollamaEndpoint,submitOllamaJob,readOllamaJob,OLLAMA_JOB_MS} from '../lib/ollama-advisor';
+import {askOllama,ollamaEndpoint,submitOllamaJob,readOllamaJob,OLLAMA_JOB_MS,OLLAMA_BUSINESS_INSTRUCTIONS} from '../lib/ollama-advisor';
+
+test('business grounding distinguishes phone repair, saved history and unavailable draft execution',()=>{
+ assert.match(OLLAMA_BUSINESS_INSTRUCTIONS,/smartphone repair shop in Bucharest/);
+ assert.match(OLLAMA_BUSINESS_INSTRUCTIONS,/not a mobile network/);
+ assert.match(OLLAMA_BUSINESS_INSTRUCTIONS,/does NOT delete saved chat history/);
+ assert.match(OLLAMA_BUSINESS_INSTRUCTIONS,/provide useful draft text FIRST/);
+ assert.match(OLLAMA_BUSINESS_INSTRUCTIONS,/no execution tools/);
+});
 test('Ollama gateway restricts outbound destinations',()=>{
  assert.equal(ollamaEndpoint('https://test.ngrok-free.dev/'),'https://test.ngrok-free.dev/v1');
  for(const value of ['http://test.ngrok-free.dev','https://127.0.0.1','https://test.ngrok-free.dev/other','https://test.ngrok-free.dev?token=x','https://test.ngrok-free.dev.evil.com'])assert.throws(()=>ollamaEndpoint(value));
