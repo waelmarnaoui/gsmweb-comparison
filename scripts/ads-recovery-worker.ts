@@ -4,7 +4,7 @@ import {decryptConnection} from '../lib/connection-crypto';
 import {CONTROL_VERSION,validAccount} from '../lib/ads-control/rules';
 import {controlStore} from '../lib/ads-control/store';
 import {createControlEngine} from '../lib/ads-control/engine';
-import {createControlGoogle} from '../lib/ads-control/google';
+import {createControlGoogle,isGoogleQuotaError} from '../lib/ads-control/google';
 const required=(name:string)=>{const value=process.env[name];if(!value)throw new Error('Recovery configuration is incomplete.');return value;};
 const account=validAccount(required('GOOGLE_ADS_CUSTOMER_ID')),deployment=required('ADS_CONTROL_RECOVERY_DEPLOYMENT_ID');
 if(deployment.length>100)throw new Error('Recovery configuration is invalid.');
@@ -24,6 +24,7 @@ const google=createControlGoogle({accountId:account,developerToken:process.env.G
 const engine=createControlEngine({store:controlStore(db),google,preflight:async()=>{throw new Error('Recovery workers cannot execute new actions.');},recoveryHealthy:async()=>false});
 const canary=required('ADS_CONTROL_RECOVERY_CANARY_CAMPAIGN_ID');if(!/^\d{1,20}$/.test(canary))throw new Error('Recovery canary is invalid.');
 let stopping=false;process.on('SIGTERM',()=>{stopping=true;});process.on('SIGINT',()=>{stopping=true;});
+let canaryRetryAt=0;
 async function heartbeat(ok:boolean){const r=await db.from('ga_ads_control_workers').upsert({account_id:account,role:'recovery',deployment_id:deployment,version:CONTROL_VERSION,checked_at:new Date().toISOString(),ok});if(r.error)throw new Error('Recovery health storage failed.');}
 async function tick(){
  try{
@@ -33,6 +34,8 @@ async function tick(){
   for(const row of due.data??[]){try{const result=await engine.recover(row.id);if(result.state!=='recovered')ok=false;}catch{ok=false;}}
   // Do not let canary checks or routine reconciliation postpone a failed recovery.
   if(!ok){await heartbeat(false);console.error('Campaign recovery needs immediate attention.');return;}
+  // Due safety restorations above are never postponed by routine canary backoff.
+  if(Date.now()<canaryRetryAt){await heartbeat(false);return;}
   const canaryResource=`customers/${account}/campaigns/${canary}`,state=await google.read('campaign_pause',canaryResource);
   // A write-permission dry run only: no campaign state changes in this health check.
   await google.mutate('campaign_pause',canaryResource,state.value,true);
@@ -42,7 +45,7 @@ async function tick(){
   await heartbeat(ok);
   // Operational output contains no credentials, provider errors, or customer data.
   console.info(ok?'Recovery check completed.':'Recovery needs attention.');
- }catch{try{await heartbeat(false);}catch{/* Keep previous timestamp stale. */}console.error('Recovery check failed; inspect the account-control dashboard.');}
+ }catch(error){if(isGoogleQuotaError(error))canaryRetryAt=Date.now()+15*60000;try{await heartbeat(false);}catch{/* Keep previous timestamp stale. */}console.error('Recovery check failed; inspect the account-control dashboard.');}
 }
 async function main(){do{await tick();if(process.argv.includes('--once'))break;if(!stopping)await new Promise(resolve=>setTimeout(resolve,30000));}while(!stopping);}
 void main().catch(()=>{console.error('Recovery worker stopped.');process.exitCode=1;});

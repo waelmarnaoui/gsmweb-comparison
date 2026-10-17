@@ -1,6 +1,7 @@
 import {ADS_REPORTING_VERSION} from '../ads-monitor';
 import {resourceFor,actionKey,type Kind} from './rules';
 export class ControlProviderError extends Error{constructor(public readonly code:string,public readonly uncertain=false,public readonly diagnostics:string[]=[],public readonly httpStatus?:number){super(code);}}
+export function isGoogleQuotaError(error:unknown){return error instanceof ControlProviderError&&(error.httpStatus===429||error.diagnostics.some(code=>['RESOURCE_EXHAUSTED','RESOURCE_TEMPORARILY_EXHAUSTED','EXCESSIVE_SHORT_TERM_QUERY_RESOURCE_CONSUMPTION','EXCESSIVE_LONG_TERM_QUERY_RESOURCE_CONSUMPTION'].includes(code)));}
 export function safeGoogleCodes(body:unknown){
  const data=body as {error?:{status?:unknown;details?:{errors?:{errorCode?:Record<string,unknown>}[]}[]}};
  const codes=new Set<string>(),add=(v:unknown)=>{if(typeof v==='string'&&/^[A-Z][A-Z0-9_]{1,79}$/.test(v))codes.add(v);};
