@@ -5,7 +5,9 @@ import {mkdir,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {openWorkerConfig,pairingHash} from '../lib/ads-control/pairing-crypto';
 import {windowsProtect} from './ads-worker-dpapi';
+import {ADS_WEB_ONLY} from '../lib/ads-web-mode';
 async function main(){
+ if(ADS_WEB_ONLY){console.info('Web-only mode: laptop pairing is disabled.');return;}
  const prompt=createInterface({input:stdin,output:stdout});
  let setupCode:string;try{setupCode=(await prompt.question('Paste the one-time laptop setup code from GSMWEB Account control: ')).trim();}finally{prompt.close();}
  pairingHash(setupCode);

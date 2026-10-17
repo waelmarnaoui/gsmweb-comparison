@@ -1,6 +1,7 @@
 'use client';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import AgentComposer from './agent-composer';
+import {ADS_WEB_ONLY} from '@/lib/ads-web-mode';
 import {RefreshCw,Square,Volume2} from 'lucide-react';
 import type {ChatAttachment} from '@/lib/chat-attachments';
 
@@ -35,7 +36,7 @@ export default function AdsAgent(){
   catch(error){setMonitoringError('Agent monitoring cannot refresh. Check the connection and do not rely on old warnings.');setNotice(error instanceof Error?error.message:'Agent unavailable.');}
   finally{refreshing.current=false;}
  },[]);
- useEffect(()=>{void refresh();const timer=setInterval(()=>{if(!document.hidden)void refresh();},30000);return()=>clearInterval(timer);},[refresh]);
+ useEffect(()=>{void refresh();},[refresh]);
  async function send(text:string,attachments:ChatAttachment[]=[],readOnly=false):Promise<string|null>{
   if(inFlight.current||!text.trim())return null;
   inFlight.current=true;setBusy(true);setNotice('');const id=crypto.randomUUID();
@@ -46,16 +47,16 @@ export default function AdsAgent(){
  }
  useEffect(()=>{
   const observed=context?.observation?.fetchedAt;
-  if(document.hidden)return;
+  if(ADS_WEB_ONLY||document.hidden)return;
   if(voiceActive||!automatic||!context?.aiConfigured||!observed||busy||inFlight.current||Date.now()-Date.parse(observed)>15*60000)return;
   if(lastAnalysis.current===observed||history.some(e=>e.observation_at===observed&&e.user_message===analysisRequest&&e.state==='completed'))return;
   lastAnalysis.current=observed;void send(analysisRequest);
  },[automatic,context,history,busy,voiceActive]);
- useEffect(()=>{const account=context?.accountId;if(!account||analysisPreference.current===account)return;analysisPreference.current=account;try{setAutomatic(localStorage.getItem('gsmweb:auto-analysis:'+account)!=='false');}catch{setAutomatic(true);}},[context?.accountId]);
+ useEffect(()=>{if(ADS_WEB_ONLY){setAutomatic(false);return;}const account=context?.accountId;if(!account||analysisPreference.current===account)return;analysisPreference.current=account;try{setAutomatic(localStorage.getItem('gsmweb:auto-analysis:'+account)!=='false');}catch{setAutomatic(true);}},[context?.accountId]);
  async function runControl(){
   if(inFlight.current||!context?.control.canRun)return;
-  inFlight.current=true;setBusy(true);setNotice('Running the authorized stock/search control cycle. Waiting for confirmed results…');
-  try{const r=await fetch('/api/ai-ads/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({operation:'tick'})});const d=await r.json();if(!r.ok)throw new Error(d.error||'The control cycle could not complete.');await refresh();setNotice('Control cycle completed. Review publication history for confirmed actions, Google review results and any holds.');}
+  inFlight.current=true;setBusy(true);setNotice('Collecting a manual report on the web server. No Ads changes will run.');
+  try{const r=await fetch('/api/ai-ads/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({operation:'tick'})});const d=await r.json();if(!r.ok)throw new Error(d.error||'The control cycle could not complete.');await refresh();setNotice('Manual report collected. Existing ads were not changed.');}
   catch(e){setNotice(e instanceof Error?e.message:'The control cycle could not complete.');}finally{inFlight.current=false;setBusy(false);}
  }
  async function saveCheckin(){
@@ -74,10 +75,10 @@ export default function AdsAgent(){
  {!context?.aiConfigured&&<p className="agent-small">{context?.aiStatus?.notice||'AI connection required.'} <a href="/optimizer/settings">Open settings</a></p>}
  <details className="agent-page-tools"><summary>Daily check-in & account controls</summary>
  <div className="agent-goals"><div><small>Daily customer payment target</small><strong>4,000 RON</strong></div><div><small>Allowed ad spend today</small><strong>{context?.allowance.allowanceBani===null||!context?'Unconfirmed':`${(context.allowance.allowanceBani/100).toFixed(2)} RON`}</strong></div><div><small>Confirmed payments today</small><strong>{context?.today?`${(context.today.amountBani/100).toFixed(2)} RON`:'Awaiting check-in'}</strong></div></div>
-   <div className="agent-checkin"><h3>{context?.checkinDue?'How was today?':'Daily customer payments'}</h3><p>At 19:00 Bucharest time, I’ll ask for all customer payments, including cash, card and transfer. While the dashboard is open, the prompt appears automatically.</p><p>Below 500: very bad · 500–999.99: bad · 1,000–1,999.99: good · 2,000+: very good.</p><label>Day <select value={checkDate||context?.businessDate||''} onChange={e=>{setCheckDate(e.target.value);setConfirmed(false);}}>{context&&<><option value={context.businessDate}>Today ({context.businessDate})</option><option value={context.yesterday}>Yesterday ({context.yesterday})</option></>}</select></label><label> Customer payments (lei) <input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);setConfirmed(false);}} placeholder="e.g. 4000"/></label><label className="agent-confirm"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>I confirm this total includes all customer payments for the selected day.</label><button className="secondary" disabled={busy||!confirmed||!context} onClick={saveCheckin}>Confirm daily payments</button><p className="agent-small">A correction is saved as a new record. Today’s check-in changes tomorrow’s allowance, never today’s.</p></div>
+   <div className="agent-checkin"><h3>{context?.checkinDue?'How was today?':'Daily customer payments'}</h3><p>Total customer payments for the selected day, including cash, card and transfer.</p><p>Below 500: very bad · 500–999.99: bad · 1,000–1,999.99: good · 2,000+: very good.</p><label>Day <select value={checkDate||context?.businessDate||''} onChange={e=>{setCheckDate(e.target.value);setConfirmed(false);}}>{context&&<><option value={context.businessDate}>Today ({context.businessDate})</option><option value={context.yesterday}>Yesterday ({context.yesterday})</option></>}</select></label><label> Customer payments (lei) <input inputMode="decimal" value={amount} onChange={e=>{setAmount(e.target.value);setConfirmed(false);}} placeholder="e.g. 4000"/></label><label className="agent-confirm"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>I confirm this total includes all customer payments for the selected day.</label><button className="secondary" disabled={busy||!confirmed||!context} onClick={saveCheckin}>Confirm daily payments</button><p className="agent-small">A correction is saved as a new record. Today’s check-in changes tomorrow’s allowance, never today’s.</p></div>
 
- <div className="agent-controls"><button className="secondary" disabled={busy} onClick={()=>void refresh()}><RefreshCw size={15}/>Refresh monitoring</button>{context?.control.canRun&&<button className="secondary" disabled={busy} onClick={()=>void runControl()}>Run authorized cycle</button>}<a className="secondary" href="/ai-ads/control">Account controls</a><a className="secondary" href="/optimizer/settings">Settings & activity</a></div>
- <label className="agent-confirm"><input type="checkbox" checked={automatic} disabled={!context?.aiConfigured} onChange={event=>{setAutomatic(event.target.checked);if(context?.accountId)try{localStorage.setItem('gsmweb:auto-analysis:'+context.accountId,String(event.target.checked));}catch{}}}/>Analyze fresh reports automatically while open</label>
+ <div className="agent-controls"><button className="secondary" disabled={busy} onClick={()=>void refresh()}><RefreshCw size={15}/>Refresh saved data</button>{context?.control.canRun&&<button className="secondary" disabled={busy} onClick={()=>void runControl()}>Collect Google report</button>}<a className="secondary" href="/ai-ads/control">Account controls</a><a className="secondary" href="/optimizer/settings">Settings & activity</a></div>
+ <label className="agent-confirm"><input type="checkbox" checked={automatic} disabled={ADS_WEB_ONLY||!context?.aiConfigured} onChange={event=>{setAutomatic(event.target.checked);if(context?.accountId)try{localStorage.setItem('gsmweb:auto-analysis:'+context.accountId,String(event.target.checked));}catch{}}}/>Analyze fresh reports automatically while open</label>
  </details>
  </section>;
 }

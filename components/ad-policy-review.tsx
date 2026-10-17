@@ -13,7 +13,7 @@ export default function AdPolicyReview(){
    const result=await response.json();if(!response.ok)throw new Error(result.error||'Google policy results are unavailable.');setReport(result.report);setStale(result.stale);
   }catch(cause){setError(cause instanceof Error?cause.message:'Google policy results are unavailable.');setStale(true);}finally{setBusy(false);inFlight.current=false;}
  }
- useEffect(()=>{void load('POST');const timer=setInterval(()=>{if(!document.hidden)void load('POST');},300000);return()=>clearInterval(timer);},[]);
+ useEffect(()=>{void load('GET');},[]);
  return <section className="setup-provider"><h2>Google’s actual ad-review results</h2><p>Read approval status and policy topics for existing responsive search ads. This does not submit new variants or change ads.</p><button className="secondary" disabled={busy} onClick={()=>void load('POST')}>{busy?'Reading policy results…':'Read Google ad-review results'}</button>
  {error&&<p role="alert">{error}</p>}
  {!report&&!busy&&!error&&<p>No Google policy result has been collected yet. Internal drafts are not submitted ads.</p>}

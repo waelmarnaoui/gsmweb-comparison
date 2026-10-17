@@ -29,7 +29,7 @@ export function makePublicationPlan(o:Opportunity,part:InventoryPart,report:Sear
  if(strategy==='MANUAL_CPC'&&!plan.manualCpcMicros)throw new Error('bid_currency_unsupported');
  const problem=publicationStockProblem(plan,part,now);if(problem)throw new Error(problem);return plan;
 }
-export type PublicationFeedback={groupResource:string;adResource:string;groupStatus:string;adStatus:string;approval:string;review:string;topics:{topic:string;type:string}[]};
+export type PublicationFeedback={groupResource:string;adResource:string;groupStatus:string;adStatus:string;approval:string;review:string;topics:{topic:string;type:string}[];observedAt?:string};
 export function googleCleared(f:PublicationFeedback){return f.adStatus==='ENABLED'&&f.approval==='APPROVED'&&f.review==='REVIEWED'&&f.topics.length===0;}
 export function creationOperations(p:PublicationPlan){
  const group=`customers/${p.account}/adGroups/-1`;

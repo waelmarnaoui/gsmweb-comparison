@@ -18,17 +18,17 @@ export default function SearchOpportunities(){
 
  const inFlight=useRef(false),seen=useRef(new Set<string>()),initialized=useRef(false);
 
- const refresh=useCallback(async()=>{
+ const refresh=useCallback(async(collect=false)=>{
 
   if(inFlight.current)return;inFlight.current=true;setBusy(true);
 
-  try{const r=await fetch('/api/ai-ads/growth',{method:'POST',cache:'no-store'});if(r.status===401){window.location.assign('/login');return;}const d=await r.json();if(!r.ok)throw new Error(d.error||'Search monitoring is unavailable.');setData(d);setError('');}
+  try{const r=await fetch('/api/ai-ads/growth',{method:collect?'POST':'GET',cache:'no-store'});if(r.status===401){window.location.assign('/login');return;}const d=await r.json();if(!r.ok)throw new Error(d.error||'Search monitoring is unavailable.');setData(d);setError('');}
 
   catch(e){setError(e instanceof Error?e.message:'Search monitoring is unavailable.');}finally{inFlight.current=false;setBusy(false);}
 
  },[]);
 
- useEffect(()=>{void refresh();const timer=setInterval(()=>{if(!document.hidden)void refresh();},60000);return()=>clearInterval(timer);},[refresh]);
+ useEffect(()=>{void refresh();},[refresh]);
 
  useEffect(()=>{
 
@@ -47,7 +47,7 @@ export default function SearchOpportunities(){
  const report=data?.report,search=report?.search,current=!!data?.reliable&&!error;
 
  return <main className="setup-main"><div className="workspace-heading"><h1>Create ads</h1><a className="secondary" href="/optimizer/ads">Ads & status</a></div>
- <div className="workspace-toolbar"><button className="primary" disabled={busy} onClick={()=>void refresh()}>{busy?'Preparing drafts...':'Prepare drafts from searches & stock'}</button><span className="agent-small">{report?.opportunities.length??0} prepared drafts</span></div>
+ <div className="workspace-toolbar"><button className="primary" disabled={busy} onClick={()=>void refresh(true)}>{busy?'Preparing drafts...':'Prepare drafts from searches & stock'}</button><span className="agent-small">{report?.opportunities.length??0} prepared drafts</span></div>
  {error&&<p role="alert" className="agent-notice">{error}</p>}{data?.error&&<p role="alert" className="agent-notice">Latest collection failed: {data.error}. Saved results are not current.</p>}{!current&&data&&<p role="alert">Current stock and search evidence is unconfirmed.</p>}
  {search&&<p className="agent-small">{search.terms.length} reported searches · {report!.activeCampaigns.length} campaigns within their schedule · Last collection: {new Date(search.fetchedAt).toLocaleString('ro-RO',{timeZone:'Europe/Bucharest'})}</p>}
  {report&&report.copyRulesVersion!==COPY_RULES_VERSION&&<p role="status">Drafts need a complete collection with current copy rules.</p>}

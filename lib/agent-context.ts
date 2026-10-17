@@ -6,6 +6,7 @@ import {IntegrationError} from './integration-error';
 import {accountFx} from './ads-fx-server';
 import {advisorReadiness} from './advisor-settings-server';
 import {observationInRon} from './ads-fx';
+import {ADS_WEB_ONLY} from './ads-web-mode';
 export function agentAccount(){
  const account=process.env.GOOGLE_ADS_CUSTOMER_ID;
  if(!account||!/^\d{10}$/.test(account))throw new IntegrationError('Set the verified reporting account in server settings.',503);
@@ -29,7 +30,7 @@ export async function readAgentContext(now=Date.now()){
  return {chatActionsEnabled:!automation.error&&automation.data?.agent_chat_enabled===true&&!!automation.data?.agent_chat_authorization,accountId:account,businessDate:business.date,yesterday,checkinDue:business.checkinDue&&!today,
   today:today?{...receiptsSummary(Number(today.amount_bani)),source:today.source,confirmedAt:today.created_at}:null,
   yesterdayPaymentsBani:prior?Number(prior.amount_bani):null,allowance,
-  control:controlReadiness(dailySpendRon,automation.error?null:automation.data,now),alerts:monitoringAlerts(converted??observation,convertedPrevious,observation?.today?.date===business.date?dailySpendRon:null,now).filter(a=>!(converted&&a.key==='currency')),observation,fx,ronObservation:converted,
+  control:ADS_WEB_ONLY?{mode:'WEB_ONLY',canRun:true,canEnable:false,scope:'manual_reads',health:'manual',lastCycleAt:observation?.fetchedAt??null,notice:'Web-only mode. No laptop is required. Saved data is used until a manual Google check; automated Ads changes are paused.',maxPauseSeconds:0,blockers:[]}:controlReadiness(dailySpendRon,automation.error?null:automation.data,now),alerts:monitoringAlerts(converted??observation,convertedPrevious,observation?.today?.date===business.date?dailySpendRon:null,now).filter(a=>!(converted&&a.key==='currency')),observation,fx,ronObservation:converted,
   aiConfigured:aiStatus.configured,aiStatus,
   limitations:['Customer payments are owner-confirmed totals, not automatically reconciled CRM profit.','Google reporting is delayed; five-minute checks do not provide five-minute source freshness.','CPA and contribution profit are unavailable until payment attribution is reconciled.','USD uses the owner-approved fixed rate of 4.74 RON. This is a reporting assumption, not a market quote or bank billing rate.']};
 }

@@ -5,6 +5,8 @@ import type {AdPolicyRecord} from '@/lib/ads-policy-reader';
 import type {ControlCampaign} from '@/lib/ads-control/google';
 import PublishingPanel from '@/components/publishing-panel';
 import LaptopRecovery from '@/components/laptop-recovery';
+import AdPolicyReview from '@/components/ad-policy-review';
+import {ADS_WEB_ONLY} from '@/lib/ads-web-mode';
 import '../../optimizer/agent.css';
 type Data={checkMode:'scheduled'|'dashboard';settings:ControlSettings;heartbeats:Heartbeat[];blockers:string[];recoveryReady:boolean;mode:string;actions:Action[];mappings:Mapping[];products:{id:string;name:string;available:number|null;eligible:boolean;fingerprint:string}[];events:{id:number;action_id:string|null;event:string;created_at:string}[];limitations:string[]};
 type Resources={ads:AdPolicyRecord[];campaigns:ControlCampaign[];fetchedAt:string|null;adsComplete:boolean;campaignsComplete:boolean;errors:{section:string;message:string}[]};
@@ -18,10 +20,10 @@ export default function ControlCenter(){
  const ticking=useRef(false);
  const [ad,setAd]=useState(''),[product,setProduct]=useState(''),[campaign,setCampaign]=useState(''),[budget,setBudget]=useState(''),[ack,setAck]=useState(false),[kind,setKind]=useState<Kind>('ad_status'),[value,setValue]=useState('PAUSED');
  const refresh=useCallback(async()=>{try{setData(await api());setStale(false);}catch(e){setStale(true);setNotice(e instanceof Error?e.message:'Control status unavailable.');}},[]);
- useEffect(()=>{void refresh();const timer=setInterval(()=>{if(!document.hidden)void refresh();},30000);return()=>clearInterval(timer);},[refresh]);
+ useEffect(()=>{void refresh();},[refresh]);
  async function run(fn:()=>Promise<unknown>){setBusy(true);setNotice('');try{await fn();await refresh();}catch(e){setNotice(e instanceof Error?e.message:'The action could not complete.');}finally{setBusy(false);}}
  useEffect(()=>{
-  if(!watching)return;
+  if(ADS_WEB_ONLY||!watching)return;
   let stopped=false;
   const tick=async()=>{
    if(ticking.current||document.hidden)return;ticking.current=true;
@@ -32,6 +34,7 @@ export default function ControlCenter(){
   void tick();const timer=setInterval(()=>void tick(),60000);
   return()=>{stopped=true;clearInterval(timer);};
  },[watching,refresh]);
+ if(ADS_WEB_ONLY)return <div className="setup-page"><main className="setup-main"><h1>Web-only monitoring</h1><p>No laptop required · Automatic Ads changes paused</p><p className="agent-small">Google checks are manual, at most once every 6 hours per report type. A quota rejection pauses checks for 24 hours. Saved data is not live.</p>{notice&&<p className="agent-notice" role="status">{notice}</p>}<div className="agent-actions"><button className="secondary" disabled={busy} onClick={()=>void run(async()=>{await api({operation:'tick'});setNotice('Manual report collected. No ads changed.');})}>Collect Google report</button><a className="secondary" href="/optimizer/reports">Saved campaign reports</a><a className="secondary" href="/review">Conversion review</a></div><AdPolicyReview/><PublishingPanel/><p>Previous jobs and action receipts remain in <a href="/optimizer/settings">Settings &amp; activity</a>. Old queued control cycles are not replayed.</p></main></div>;
  const selected=resources?.campaigns.find(c=>c.resourceName===campaign);
  const recoveryCampaigns:Pick<ControlCampaign,'resourceName'|'name'>[]=[...(resources?.campaigns??[])];
  for(const ad of resources?.ads??[]){const account=ad.resourceName.split('/')[1],resourceName=`customers/${account}/campaigns/${ad.campaignId}`;if(!recoveryCampaigns.some(c=>c.resourceName===resourceName))recoveryCampaigns.push({resourceName,name:`Campaign ${ad.campaignId} · verified live-ad report`});}

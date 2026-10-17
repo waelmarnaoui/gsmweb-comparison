@@ -6,7 +6,9 @@ import {IntegrationError} from '../integration-error';
 import {agentAccount} from '../agent-context';
 import {setupControl,controlGoogle} from './server';
 import {pairingHash,sealWorkerConfig} from './pairing-crypto';
+import {ADS_WEB_ONLY} from '../ads-web-mode';
 export async function createLaptopPairing(actor:string,canary:string){
+ if(ADS_WEB_ONLY)throw new IntegrationError('Laptop pairing is disabled in web-only mode.',409);
  const {db,account}=await setupControl();
  if(!/^\d{1,20}$/.test(canary))throw new Error('Choose a live campaign for the recovery validation check.');
  const resource=`customers/${account}/campaigns/${canary}`,google=controlGoogle();

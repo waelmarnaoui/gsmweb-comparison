@@ -4,9 +4,12 @@ import {createAdsObserver} from './ads-monitor';
 import {service} from './server';
 import {IntegrationError} from './integration-error';
 import {createAdsRefreshGate} from './ads-refresh';
+import {ADS_WEB_ONLY} from './ads-web-mode';
+import {lowRequestAdsRead} from './ads-read-server';
 
 const refreshGate=createAdsRefreshGate();
 export async function refreshAdsObservation(){
+ if(ADS_WEB_ONLY)return {refreshError:null,mode:'saved_only'};
  const account=process.env.GOOGLE_ADS_CUSTOMER_ID;
  if(!account)return {refreshError:'Google Ads reporting account is not configured.'};
  return refreshGate(account,async()=>{
@@ -17,9 +20,15 @@ export async function refreshAdsObservation(){
 }
 
 export async function collectAdsObservation(){
+ const account=process.env.GOOGLE_ADS_CUSTOMER_ID;if(!account)throw new IntegrationError('Reporting account is not configured.',503);
+ if(ADS_WEB_ONLY)return lowRequestAdsRead(account,'report',collectAdsObservationRaw);
+ return collectAdsObservationRaw();
+}
+async function collectAdsObservationRaw(){
  const accountId=process.env.GOOGLE_ADS_CUSTOMER_ID;
  if(!accountId)throw new IntegrationError('Google Ads reporting account is not configured.',503);
- const observer=createAdsObserver({accountId,loginCustomerId:process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID,
+ const deadline=AbortSignal.timeout(45000);
+ const observer=createAdsObserver({accountId,loginCustomerId:process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID,fetcher:(url,init)=>fetch(url,{...init,signal:AbortSignal.any([deadline,...(init?.signal?[init.signal]:[])])}),
   developerToken:process.env.GOOGLE_ADS_DEVELOPER_TOKEN,
   token:async()=>(await connectionToken('google_ads_management')).token});
  const observation=await observer.collect();

@@ -6,6 +6,8 @@ import {makePublicationPlan,creationOperations,publicationSpendProblem,publicati
 import {createPublicationEngine,type PublicationRow} from '../lib/ai-ads/publishing-engine';
 import {createPublishingGoogle} from '../lib/ai-ads/publishing-google';
 import {ControlProviderError} from '../lib/ads-control/google';
+import {feedbackFresh} from '../lib/ai-ads/intervention-policy';
+import {quotaWait} from '../lib/ai-ads/quota-policy';
 const now=Date.parse('2026-10-17T10:00:00Z'),stamp=new Date(now).toISOString(),account='2050434247';
 const part=normalizeInventory('dmjunqbncyrinykbbmfk',[{id:'part1',name:'Battery',sku:'b1',brand:'Apple',partCode:null,partType:'battery',compatibleModels:['Apple iPhone 14'],modelId:null,category:'PART',quality:'new',active:true,minStock:1,recommendedPrice:100,updatedAt:stamp}],[{id:'lot1',productId:'part1',quantityAvailable:3,unitCost:50,costIncludesVat:true,updatedAt:stamp}],[],defaultInventoryRules,now)[0];
 const report:SearchReport={accountId:account,currency:'USD',timeZone:'Europe/Bucharest',fetchedAt:stamp,windowStart:'2026-10-11',windowEnd:'2026-10-17',campaigns:[{id:'1',name:'Local',status:'ENABLED',startDate:null,endDate:null,schedule:[]}],terms:[{campaignId:'1',adGroupId:'2',term:'baterie iphone 14',impressions:12,clicks:2,costMicros:'1000'}],privacyFiltered:0,complete:true,termsCollected:true};
@@ -55,4 +57,39 @@ test('activation requires presence-based local targeting and refuses countrywide
  assert.equal(localPublicationScope('PRESENCE',[]),false);
  assert.equal(localPublicationScope('PRESENCE',[{type:'PROXIMITY',street:'Drumul Taberei 138',city:'Bucuresti',radius:2,units:'KILOMETERS'}]),true);
  assert.equal(localPublicationScope('PRESENCE',[{type:'PROXIMITY',street:'Drumul Taberei 138',city:'Bucuresti',radius:20,units:'KILOMETERS'}]),false);
+});
+
+test('policy-only restriction leaves eligible groups untouched even when paused or a stock/spend hold exists',async()=>{
+ for(const state of ['active','paused','submitted'])for(const status of ['ENABLED','PAUSED']){
+  const f=fixture(state);f.setLive({...feedback,groupStatus:status});f.setProblem('daily_allowance_reached');
+  const engine=createPublicationEngine({...f.options,policyOnly:async()=>true});const result=await engine.monitor(f.get());
+  assert.deepEqual(f.writes,[]);assert.equal(result.error_code,state==='active'&&status==='PAUSED'?'owner_paused_group':null);assert.equal(result.google_feedback?.groupStatus,status);assert.equal(feedbackFresh(result.google_feedback,now),true);
+ }
+});
+test('policy-only monitoring never mutates limited, disapproved or pending-review groups',async()=>{
+ for(const approval of ['DISAPPROVED','APPROVED_LIMITED','UNKNOWN']){
+  const f=fixture('active');f.setLive({...feedback,approval,groupStatus:'ENABLED'});
+  await createPublicationEngine({...f.options,policyOnly:async()=>true}).monitor(f.get());assert.deepEqual(f.writes,[]);
+ }
+});
+test('policy-only restriction blocks unrelated new publications and rechecks before a status write',async()=>{
+ const f=fixture();await createPublicationEngine({...f.options,policyOnly:async()=>true}).create(f.get());assert.deepEqual(f.trace,['saved:prepared']);assert.deepEqual(f.writes,[]);
+ const g=fixture('submitted');let restricted=false;const original=g.google.groupStatus;
+ g.google.groupStatus=async(...args)=>{const r=await original(...args);if(args[2])restricted=true;return r;};
+ await createPublicationEngine({...g.options,policyOnly:async()=>restricted}).monitor(g.get());assert.deepEqual(g.writes,[]);
+});
+test('read-only policy checks retain owner-paused protection for later cycles',async()=>{
+ const f=fixture('paused');f.setRow({error_code:'owner_paused_group'});await createPublicationEngine({...f.options,policyOnly:async()=>true}).monitor(f.get());
+ assert.equal(f.get().error_code,'owner_paused_group');await f.engine.monitor(f.get());assert.deepEqual(f.writes,[]);
+});
+test('failed reads never renew cached policy evidence; quota failure stops the tick and preserves uncertainty',async()=>{
+ const f=fixture('active'),old={...feedback,observedAt:new Date(now-3600000).toISOString()};f.setRow({google_feedback:old});
+ f.google.inspect=async()=>{throw new ControlProviderError('google_publication_rejected',false,['RESOURCE_EXHAUSTED'],429);};
+ await assert.rejects(f.engine.monitor(f.get()),ControlProviderError);assert.equal(feedbackFresh(f.get().google_feedback,now),false);assert.equal(f.get().google_feedback?.observedAt,old.observedAt);assert.deepEqual(f.writes,[]);
+ assert.equal(feedbackFresh(feedback,now),false);assert.equal(feedbackFresh({...feedback,observedAt:new Date(now+60000).toISOString()},now),false);
+ const g=fixture();g.google.create=async(_,validate)=>{if(!validate)throw new ControlProviderError('google_publication_rejected',true,['RESOURCE_EXHAUSTED'],429);return 'validation';};
+ await assert.rejects(g.engine.create(g.get()),ControlProviderError);assert.equal(g.get().state,'uncertain');assert.equal(g.get().pending_operation,'create');
+});
+test('quota cooldown survives invocations and expires without claiming to know Google reset time',()=>{
+ assert.equal(quotaWait('google_ads_quota_cooldown',stamp,now),900);assert.equal(quotaWait('google_ads_quota_cooldown',stamp,now+900000),0);assert.equal(quotaWait('publication_tick_incomplete',stamp,now),0);assert.equal(quotaWait('google_ads_quota_cooldown','invalid',now),0);
 });

@@ -1,6 +1,7 @@
 param([switch]$Background)
 $ErrorActionPreference='Stop'
 $projectRoot=Split-Path -Parent $PSScriptRoot
+if(Select-String -LiteralPath (Join-Path $projectRoot 'lib/ads-web-mode.ts') -SimpleMatch 'export const ADS_WEB_ONLY=true;' -Quiet){Write-Output 'Web-only mode: no laptop worker is needed.';exit}
 $nodePath=(Get-Command node -ErrorAction Stop).Source
 $tsx=Join-Path $projectRoot 'node_modules/tsx/dist/cli.mjs'
 if(-not(Test-Path -LiteralPath $tsx)){throw 'Install the project dependencies before starting recovery.'}
@@ -17,7 +18,8 @@ if(Test-Path -LiteralPath $pidFile){
  $workerProcessId=0
  if([int]::TryParse(([IO.File]::ReadAllText($pidFile)).Trim(),[ref]$workerProcessId)){
   $running=Get-Process -Id $workerProcessId -ErrorAction SilentlyContinue
-  if($running -and $running.Path -eq $nodePath){Write-Output 'GSMWEB recovery is already running. Check Account control for its health.';exit}
+  $pidWritten=(Get-Item -LiteralPath $pidFile).LastWriteTime
+  if($running -and $running.Path -eq $nodePath -and $running.StartTime -le $pidWritten.AddSeconds(10) -and $running.StartTime -ge $pidWritten.AddMinutes(-1)){Write-Output 'GSMWEB recovery is already running. Check Account control for its health.';exit}
  }
 }
 $hostScript=Join-Path $PSScriptRoot 'ads-laptop-host.ts'

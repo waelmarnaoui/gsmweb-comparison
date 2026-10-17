@@ -6,7 +6,7 @@ type Review={head:string;url:string;status:string;statuses:{name:string;state:st
 export default function AgentAccess(){
  const [data,setData]=useState<Data|null>(null),[token,setToken]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[review,setReview]=useState<{id:string;data:Review}|null>(null),[approved,setApproved]=useState(false);
  const refresh=useCallback(async()=>{try{const r=await fetch('/api/optimizer/agent-access',{cache:'no-store'});const d=await r.json();if(!r.ok)throw new Error(d.error||'Agent access unavailable.');setData(d);}catch(e){setNotice(e instanceof Error?e.message:'Agent access unavailable.');}},[]);
- useEffect(()=>{void refresh();const timer=setInterval(()=>{if(!document.hidden)void refresh();},15000);return()=>clearInterval(timer);},[refresh]);
+ useEffect(()=>{void refresh();},[refresh]);
  async function action(input:unknown){setBusy(true);setNotice('');try{const r=await fetch('/api/optimizer/agent-access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)}),d=await r.json();if(!r.ok)throw new Error(d.error||'Agent action was not confirmed.');await refresh();return d;}catch(e){setNotice(e instanceof Error?e.message:'Agent action was not confirmed.');return null;}finally{setBusy(false);}}
  async function connect(){const secret=token;setToken('');const d=await action({operation:'connect_github',token:secret});if(d)setNotice('GitHub connected securely. Ask the agent to inspect or change the app source.');}
  async function inspect(id:string){const d=await action({operation:'review_code',id});if(d){setReview({id,data:d});setApproved(false);}}
