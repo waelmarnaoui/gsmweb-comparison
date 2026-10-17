@@ -2,7 +2,8 @@ import {requireAdmin,service,apiError} from '@/lib/server';
 import {sameOrigin} from '@/lib/connections';
 import {readAgentContext,agentAccount} from '@/lib/agent-context';
 import {type AdvisoryReply} from '@/lib/agent-model';
-import {runActionAgent} from '@/lib/action-agent-model';
+import {runActionAgent as runGoogleAgent} from '@/lib/action-agent-model';
+import {askOllama} from '@/lib/ollama-advisor';
 import {sourceContent} from '@/lib/agent-source-policy';
 import {actionTools} from '@/lib/agent-actions';
 export const maxDuration=300;
@@ -29,7 +30,9 @@ export async function POST(request:Request){try{
  if(body.message.length>CHAT_MESSAGE_LIMIT)throw new IntegrationError('Message exceeds 4,000 characters. Attach the full text for a read-only review instead. Nothing was sent to the AI.',400);
  if(body.readOnly!==undefined&&typeof body.readOnly!=='boolean')throw new IntegrationError('Invalid review mode.',400);
  try{sourceContent(body.message);}catch{throw new IntegrationError('Keep credentials out of chat. Use the secure connection form.',400);}
- const {key,model}=await advisorConfiguration();
+ const configuration=await advisorConfiguration(),{key,model}=configuration;
+ if(configuration.provider==='ollama'&&attachments.length)throw new IntegrationError('This Ollama model accepts text messages only. Remove attachments before sending.',400);
+ const runActionAgent=(options:Parameters<typeof runGoogleAgent>[0])=>configuration.provider==='ollama'?askOllama({key:key!,baseURL:configuration.baseURL!,message:options.message,context:options.context,history:options.history}):runGoogleAgent(options);
  if(!key||!model)throw new IntegrationError('Add your Gemini API key in AI settings on this dashboard to enable chat.',503);
  const context=await readAgentContext(),db=service();
  let savedMessage;try{savedMessage=savedChatMessage(body.message,attachments.map(file=>file.name));}catch(error){throw new IntegrationError(error instanceof Error?error.message:'Message is too long.',400);}
@@ -48,7 +51,7 @@ export async function POST(request:Request){try{
   try{const p=await readPublishing();automaticPublication={available:true,correctionsEnabled:p.correctionsEnabled,correctionScope:'One factual editorial replacement of agent-created disapproved ads; eligible, limited and business-policy cases unchanged.',enabled:p.enabled,globallyPaused:p.globallyPaused,lastCheckedAt:p.lastCheckedAt,error:p.error,publications:p.publications.slice(0,20).map(r=>({model:r.model,partType:r.partType,state:r.state,error:r.error,google:r.google?{groupStatus:r.google.groupStatus,adStatus:r.google.adStatus,approval:r.google.approval,review:r.google.review,topics:r.google.topics}:null,checkedAt:r.checkedAt})),limitations:p.limitations};}catch{/* Missing publishing setup is unknown, never fabricated success. */}
   const preferences=await db.from('ga_agent_preferences').select('name,value,updated_at').eq('account_id',context.accountId).order('name').limit(30);
   const modelContext={...context,businessPreferences:preferences.error?{available:false}:preferences.data,stock,automaticPublication,accountId:undefined,observation:redact(observation),ronObservation:redact(context.ronObservation)};
-  const reply=await runActionAgent({key,model,attachments,tools:actionTools({exchangeId:body.id,account:context.accountId,actor:user.id,userMessage:body.message.trim(),readOnly:body.readOnly===true||body.message.trim()==='Analyze the latest account report. Explain what you observed, the highest priority improvement, expected impact, risks and missing information. Do not change the account.'}),message:body.message.trim(),context:modelContext,history:(history??[]).reverse().flatMap(row=>[{role:'user' as const,content:(()=>{try{return sourceContent(row.user_message);}catch{return '[Credential-like message excluded.]';}})()},{role:'assistant' as const,content:JSON.stringify(row.assistant_reply as AdvisoryReply)}])});
+  const reply=await runActionAgent({key,model,attachments,tools:actionTools({exchangeId:body.id,account:context.accountId,actor:user.id,userMessage:body.message.trim(),readOnly:body.readOnly!==false||body.message.trim()==='Analyze the latest account report. Explain what you observed, the highest priority improvement, expected impact, risks and missing information. Do not change the account.'}),message:body.message.trim(),context:modelContext,history:(history??[]).reverse().flatMap(row=>[{role:'user' as const,content:(()=>{try{return sourceContent(row.user_message);}catch{return '[Credential-like message excluded.]';}})()},{role:'assistant' as const,content:JSON.stringify(row.assistant_reply as AdvisoryReply)}])});
   const saved=await db.from('ga_agent_exchanges').update({assistant_reply:reply,state:'completed'}).eq('id',body.id).eq('actor',user.id).eq('state','pending').select('id');
   if(saved.error||saved.data?.length!==1)throw new Error('Could not save the AI reply.');
   return Response.json({id:body.id,reply},{headers:{'Cache-Control':'no-store'}});

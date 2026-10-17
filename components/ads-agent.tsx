@@ -20,6 +20,7 @@ const analysisRequest='Analyze the latest account report. Explain what you obser
 export default function AdsAgent(){
  const [context,setContext]=useState<(Context&{stockWork?:StockWork})|null>(null),[history,setHistory]=useState<Exchange[]>([]),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[amount,setAmount]=useState(''),[checkDate,setCheckDate]=useState(''),[confirmed,setConfirmed]=useState(false),[automatic,setAutomatic]=useState(false);
  const [voiceActive,setVoiceActive]=useState(false);
+ const [readOnly,setReadOnly]=useState(true);
  const chatEnd=useRef<HTMLDivElement>(null);
  useEffect(()=>{chatEnd.current?.scrollIntoView({block:'nearest',behavior:'smooth'});},[history.length,history.at(-1)?.state]);
  const lastAnalysis=useRef(''),analysisPreference=useRef(''),inFlight=useRef(false);
@@ -37,11 +38,11 @@ export default function AdsAgent(){
   finally{refreshing.current=false;}
  },[]);
  useEffect(()=>{void refresh();},[refresh]);
- async function send(text:string,attachments:ChatAttachment[]=[],readOnly=false):Promise<string|null>{
+ async function send(text:string,attachments:ChatAttachment[]=[],reviewOnly=false):Promise<string|null>{
   if(inFlight.current||!text.trim())return null;
   inFlight.current=true;setBusy(true);setNotice('');const id=crypto.randomUUID();
   setHistory(previous=>[...previous,{id,user_message:text+(attachments.length?'\n[Attached: '+attachments.map(file=>file.name).join(', ')+']':''),assistant_reply:null,state:'pending',observation_at:null}]);
-  try{const result=await api('chat','POST',{id,message:text,attachments,readOnly});setHistory(previous=>previous.map(exchange=>exchange.id===id?{...exchange,assistant_reply:result.reply,state:'completed'}:exchange));void refresh();return result.reply.reply;}
+  try{const result=await api('chat','POST',{id,message:text,attachments,readOnly:readOnly||reviewOnly});setHistory(previous=>previous.map(exchange=>exchange.id===id?{...exchange,assistant_reply:result.reply,state:'completed'}:exchange));void refresh();return result.reply.reply;}
   catch(error){setHistory(previous=>previous.map(exchange=>exchange.id===id?{...exchange,state:'failed'}:exchange));setNotice(error instanceof Error?error.message:'Chat failed.');try{const chats=await api('chat');setHistory(chats.exchanges);}catch{/* Keep the visible failure if history is unavailable. */}return null;}
   finally{inFlight.current=false;setBusy(false);}
  }
@@ -71,6 +72,7 @@ export default function AdsAgent(){
  <div className="agent-chat" role="log" aria-label="Marketing conversation" aria-live="polite">{history.length===0&&<div className="empty-state">What would you like to work on today?</div>}{history.map(exchange=><article key={exchange.id}><p className="user-message">{exchange.user_message}</p>{exchange.assistant_reply?<div><p><strong>{exchange.state==='failed'?'Request stopped':'GSMWeb agent'}</strong></p><p>{exchange.assistant_reply.reply}</p><div className="agent-controls"><button type="button" className="workspace-icon" disabled={voiceActive} title="Read reply aloud" aria-label="Read reply aloud" onClick={()=>speak(exchange.assistant_reply!.reply)}><Volume2 size={16}/></button><button type="button" className="workspace-icon" disabled={voiceActive} title="Stop speaking" aria-label="Stop speaking" onClick={()=>window.speechSynthesis?.cancel()}><Square size={15}/></button><details><summary>Evidence · {exchange.assistant_reply.confidence} confidence</summary><ul>{exchange.assistant_reply.evidence.map((item,index)=><li key={index}>{item}</li>)}</ul><p><strong>Recommendation:</strong> {exchange.assistant_reply.recommendation}</p><p><strong>Expected impact:</strong> {exchange.assistant_reply.expectedImpact}</p><p><strong>Risks:</strong> {exchange.assistant_reply.risks}</p><p><strong>Missing data:</strong> {exchange.assistant_reply.missingData.join('; ')||'None reported'}</p></details></div></div>:<p className="agent-pending">{exchange.state==='pending'?'Working with connected tools. Waiting for a confirmed response.':'Request not completed. Check activity before retrying account actions.'}</p>}</article>)}
  <div ref={chatEnd}/></div>
  <div className="agent-quick-prompts"><button disabled={busy||voiceActive||!context?.aiConfigured} onClick={()=>void send(analysisRequest)}>Analyze performance</button><button disabled={busy||voiceActive||!context?.aiConfigured} onClick={()=>void send('Check the actual status and policy review of our created ads. Do not change the account.')}>Check my ads</button><button disabled={busy||voiceActive||!context?.aiConfigured} onClick={()=>void send('Prepare a factual ad draft from current verified stock. Do not publish or change settings.')}>Prepare an ad draft</button></div>
+ <fieldset disabled={busy||voiceActive} className="agent-chat-tools" aria-label="Chat control mode"><legend>Chat mode</legend><label><input type="radio" name="chat-mode" checked={readOnly} onChange={()=>setReadOnly(true)}/> Read Only</label><label><input type="radio" name="chat-mode" checked={!readOnly} onChange={()=>{if(window.confirm('Allow supported account actions requested in chat? Existing permissions, spending limits, policy checks and web-only restrictions still apply. Ollama currently remains read-only in both modes.'))setReadOnly(false);}}/> Full Control</label></fieldset>
  <AgentComposer busy={busy} enabled={!!context?.aiConfigured} onSend={send} onVoiceChange={setVoiceActive}/>
  {!context?.aiConfigured&&<p className="agent-small">{context?.aiStatus?.notice||'AI connection required.'} <a href="/optimizer/settings">Open settings</a></p>}
  <details className="agent-page-tools"><summary>Daily check-in & account controls</summary>

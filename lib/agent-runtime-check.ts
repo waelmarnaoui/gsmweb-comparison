@@ -11,7 +11,7 @@ const version='action-tools-v1';
 // One real, bounded verification per account/release. No advertising mutations.
 export async function checkActionRuntime(){
  const db=service(),account=agentAccount(),c=await db.from('ga_ads_control').select('agent_chat_enabled').eq('account_id',account).single();if(c.error||!c.data.agent_chat_enabled)return;
- const {key,model}=await advisorConfiguration();if(!key)return;
+ const {key,model,provider}=await advisorConfiguration();if(!key||provider==='ollama')return;
  const claim=await db.from('ga_agent_runtime_checks').upsert({account_id:account,version,status:'running'},{onConflict:'account_id,version',ignoreDuplicates:true}).select('version');if(claim.error||!claim.data?.length)return;
  let details:Record<string,unknown>={provider:'anthropic',model,sdkToolExecuted:false};
  try{
