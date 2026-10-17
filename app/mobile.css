@@ -1,0 +1,25 @@
+@media(max-width:800px){
+ .app button,.setup-page button,.app .primary,.app .secondary,.setup-page .primary,.setup-page .secondary{min-height:44px;touch-action:manipulation;white-space:normal}
+ .app input:not([type=checkbox]):not([type=radio]),.app select,.app textarea,.setup-page input:not([type=checkbox]):not([type=radio]),.setup-page select,.setup-page textarea{font-size:16px;min-height:44px;max-width:100%}
+ .app input[type=checkbox],.setup-page input[type=checkbox]{width:20px;height:20px;flex-shrink:0}
+ .app .sidebar{overflow-y:auto;padding-bottom:max(24px,env(safe-area-inset-bottom))}
+ .app .sidebar nav a,.app .sidebar nav button{min-height:44px;height:auto;padding-block:11px}
+ .app .main{min-width:0}
+ .app .mobile-menu{width:44px;height:44px}
+ .app .stats strong{flex-wrap:wrap;overflow-wrap:anywhere}
+ .app .section-heading,.setup-page .section-heading{flex-wrap:wrap;gap:12px}
+ .app .table-controls,.app .conversion-filters{min-width:0}
+ .app .search{min-width:0}
+ .app .table-scroll{max-width:100%}
+ .app .connection,.app .source-row{flex-wrap:wrap;overflow-wrap:anywhere}
+ .app .overview-band{flex-wrap:wrap}
+ .app .modal-backdrop{padding:12px}
+ .app .modal{max-height:calc(100dvh - 24px);padding:20px}
+ .setup-page .setup-selection,.setup-page .setup-provider{min-width:0;overflow-wrap:anywhere}
+ .app main,.setup-page .setup-main{padding-bottom:max(24px,env(safe-area-inset-bottom))}
+ .app .heading h1,.setup-page h1{overflow-wrap:anywhere}
+}
+@media(prefers-reduced-motion:reduce){
+ .workspace-shell .agent-chat{scroll-behavior:auto}
+ .workspace-nav{transition:none}
+}
