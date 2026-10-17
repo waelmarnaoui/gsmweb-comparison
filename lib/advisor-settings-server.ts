@@ -1,6 +1,6 @@
 import 'server-only';
 import {getConnection,saveConnection} from './connections';
-import {advisorModel,advisorKey,selectGeminiConfiguration} from './advisor-settings';
+import {advisorModel,normalizeAdvisorKey,selectGeminiConfiguration} from './advisor-settings';
 import {IntegrationError} from './integration-error';
 import {askAdvisor} from './agent-model';
 import {service} from './server';
@@ -10,8 +10,8 @@ export async function advisorConfiguration(){
 }
 export async function advisorReadiness(){const {key:unused,...status}=await advisorConfiguration();void unused;return {...status,notice:status.configured?'Gemini is configured. Test the connection to verify model access. Free quota depends on your Google project; billing-enabled projects may charge.':'Add a Gemini API key from Google AI Studio in AI settings. Previous Claude keys are not used. No paid provider fallback is enabled.'};}
 export async function configureAdvisor(actor:string,input:{apiKey?:unknown;model?:unknown;save:boolean}){
- const existing=await advisorConfiguration(),key=input.apiKey||existing.key,model=advisorModel(input.model??existing.model);
- if(!advisorKey(key))throw new IntegrationError('Enter a valid Gemini API key in the secure settings form. Do not paste keys into chat.',400);
+ const existing=await advisorConfiguration(),key=normalizeAdvisorKey(input.apiKey||existing.key),model=advisorModel(input.model??existing.model);
+ if(!key)throw new IntegrationError('Paste the complete Gemini API key from Google AI Studio in the secure settings form. Standard and authorization keys are supported. Do not paste keys into chat.',400);
  // The connection test uses static configuration text, never customer records,
  // stock costs or advertising data. No provider secrets enter the model input.
  await askAdvisor({key,model,message:'Confirm that the AI advisor connection works. This is a connection test; do not analyze an advertising account.',context:{connectionTest:true},history:[]});
