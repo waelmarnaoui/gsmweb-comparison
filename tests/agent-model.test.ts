@@ -16,3 +16,15 @@ test('incomplete, refused, malformed and provider errors never become advice',as
  }
  await assert.rejects(askAdvisor({key:'secret',model:'model',message:'x',context:{},history:[],fetcher:async()=>new Response('private',{status:401})}),error=>error instanceof Error&&!error.message.includes('private'));
 });
+
+
+test('model reports only the server-selected control scope and confirmed outcomes',async()=>{
+ for(const controlMode of ['CONTROL','PAUSED'] as const)await askAdvisor({key:'secret',model:'configured-model',controlMode,message:'manage my account',context:{},history:[],fetcher:async(_url,init)=>{
+  const body=JSON.parse(String(init?.body));assert.equal(body.tools,undefined);
+  assert.ok(body.system.includes(controlMode==='CONTROL'?'The account is in CONTROL mode':'Account automation is PAUSED'));
+  assert.ok(!body.system.includes('You are in ADVISE mode'));
+  assert.ok(body.system.includes('confirmed result'));
+  if(controlMode==='CONTROL'){assert.ok(body.system.includes('Existing ads, budgets and targeting remain protected'));assert.ok(body.system.includes('free text does not itself execute actions'));}
+  return Response.json({stop_reason:'end_turn',content:[{type:'text',text:JSON.stringify(reply)}]});
+ }});
+});

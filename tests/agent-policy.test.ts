@@ -46,3 +46,18 @@ test('ten-minute pause rule means maximum downtime, never a CPA learning window'
  assert.throws(()=>pauseDeadline(now,now-1));
  assert.equal(controlReadiness(400).canEnable,false);
 });
+
+
+test('control mode follows saved authorization and pause state, never a cosmetic toggle',()=>{
+ const settings={auto_publish_enabled:true,auto_publish_authorization:'owner approved',global_paused:false,auto_publish_checked_at:new Date(now).toISOString(),auto_publish_error:null};
+ const active=controlReadiness(150,settings,now);assert.equal(active.mode,'CONTROL');assert.equal(active.canRun,true);assert.equal(active.health,'current');assert.equal(active.canEnable,false);
+ assert.equal(controlReadiness(150,{...settings,auto_publish_authorization:null},now).mode,'ADVISE');
+ assert.equal(controlReadiness(150,{...settings,auto_publish_enabled:false},now).canRun,false);
+ const paused=controlReadiness(150,{...settings,global_paused:true},now);assert.equal(paused.mode,'PAUSED');assert.equal(paused.canRun,false);
+ assert.equal(controlReadiness(150,null,now).mode,'ADVISE');
+ assert.equal(controlReadiness(150,{...settings,auto_publish_checked_at:new Date(now-6*60000).toISOString()},now).health,'unconfirmed');
+ assert.equal(controlReadiness(150,{...settings,auto_publish_error:'failed'},now).health,'unconfirmed');
+ // Missing allowance does not revoke recorded authority; the execution guard must
+ // still hold activation. Do not claim unrestricted permissions from this mode.
+ assert.equal(controlReadiness(null,settings,now).scope,'new_stock_search_ads');
+});
