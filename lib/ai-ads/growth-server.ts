@@ -9,6 +9,8 @@ import {COPY_RULES_VERSION} from './copy-rules';
 import {digest} from './inventory';
 import {IntegrationError} from '../integration-error';
 import {resourceReadError} from '../ads-control/resource-loader';
+import {ADS_WEB_ONLY} from '../ads-web-mode';
+import {lowRequestAdsRead} from '../ads-read-server';
 const storage=()=>new IntegrationError('Search monitoring storage is unavailable. Install the reviewed SEARCH-GROWTH-PROPOSED.sql in the attribution database.',503);
 export async function readGrowthMonitor(){
  const db=service(),account=agentAccount();
@@ -24,6 +26,10 @@ export async function readGrowthMonitor(){
 }
 let active:Promise<Awaited<ReturnType<typeof readGrowthMonitor>>>|null=null,retryAfter=0;
 export async function collectGrowthMonitor(){
+ if(ADS_WEB_ONLY)return lowRequestAdsRead(agentAccount(),'search',collectGrowthMonitorRaw);
+ return collectGrowthMonitorRaw();
+}
+async function collectGrowthMonitorRaw(){
  if(active)return active;
  active=(async()=>{
   const previous=await readGrowthMonitor(),stamp=Date.parse(previous.report?.search?.fetchedAt??'');
@@ -35,7 +41,7 @@ export async function collectGrowthMonitor(){
    const stock=await collectStockMonitor();if(!stock.reliable||!stock.snapshot)throw new IntegrationError('Current stock could not be verified. Search-driven drafts were not generated.',503);
    opportunities=prepareSearchOpportunities(search,stock.snapshot.parts);
   }catch(error){
-   retryAfter=Date.now()+60000;const saved=await db.from('ga_ads_search_runs').upsert({account_id:account,slot,status:'failed',report:null,error_code:resourceReadError(error)},{onConflict:'account_id,slot,status',ignoreDuplicates:true});if(saved.error)throw storage();return readGrowthMonitor();
+   retryAfter=Date.now()+60000;const saved=await db.from('ga_ads_search_runs').upsert({account_id:account,slot,status:'failed',report:null,error_code:resourceReadError(error)},{onConflict:'account_id,slot,status',ignoreDuplicates:true});if(saved.error)throw storage();if(ADS_WEB_ONLY)throw error;return readGrowthMonitor();
   }
   const report={copyRulesVersion:COPY_RULES_VERSION,search,opportunities,activeCampaigns:search.campaigns.filter(c=>campaignOpen(c,search.timeZone)).map(c=>c.id),publicationBlockedReason:'Restricted-service risk requires Google review of the exact truthful offer. New groups remain paused until the exact ad is cleared. Existing ads, keywords, budgets and campaigns are protected.'};
   if(Buffer.byteLength(JSON.stringify(report))>4000000)throw new IntegrationError('Search monitoring report exceeds its safe storage limit.',503);

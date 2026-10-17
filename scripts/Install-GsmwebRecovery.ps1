@@ -1,4 +1,5 @@
 $ErrorActionPreference='Stop'
+if(Select-String -LiteralPath (Join-Path (Split-Path -Parent $PSScriptRoot) 'lib/ads-web-mode.ts') -SimpleMatch 'export const ADS_WEB_ONLY=true;' -Quiet){Write-Output 'Web-only mode: laptop worker installation is disabled.';exit}
 $launcher=Join-Path $PSScriptRoot 'Start-GsmwebRecovery.ps1'
 & $launcher
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent().Name

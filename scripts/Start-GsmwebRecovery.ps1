@@ -1,6 +1,7 @@
 param([switch]$Background)
 $ErrorActionPreference='Stop'
 $projectRoot=Split-Path -Parent $PSScriptRoot
+if(Select-String -LiteralPath (Join-Path $projectRoot 'lib/ads-web-mode.ts') -SimpleMatch 'export const ADS_WEB_ONLY=true;' -Quiet){Write-Output 'Web-only mode: no laptop worker is needed.';exit}
 $nodePath=(Get-Command node -ErrorAction Stop).Source
 $tsx=Join-Path $projectRoot 'node_modules/tsx/dist/cli.mjs'
 if(-not(Test-Path -LiteralPath $tsx)){throw 'Install the project dependencies before starting recovery.'}

@@ -8,15 +8,15 @@ type Monitor={snapshot:StockSnapshot|null;stale:boolean;reliable:boolean;lastAtt
 export default function AiAdsManager(){
  const [monitor,setMonitor]=useState<Monitor|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[query,setQuery]=useState(''),[page,setPage]=useState(0),[voice,setVoice]=useState(false),[voiceNotice,setVoiceNotice]=useState('');
  const inFlight=useRef(false),spoken=useRef(new Set<string>());
- const refresh=useCallback(async()=>{
+ const refresh=useCallback(async(collect=false)=>{
   if(inFlight.current)return;inFlight.current=true;setBusy(true);setError('');
   try{
-   const response=await fetch('/api/ai-ads/monitor',{method:'POST',cache:'no-store'});
+   const response=await fetch('/api/ai-ads/monitor',{method:collect?'POST':'GET',cache:'no-store'});
    if(response.status===401){window.location.assign('/login');return;}
    const result=await response.json();if(!response.ok)throw new Error(result.error||'Stock monitoring is unavailable.');setMonitor(result);
   }catch(cause){setError(cause instanceof Error?cause.message:'Stock monitoring is unavailable.');}finally{setBusy(false);inFlight.current=false;}
  },[]);
- useEffect(()=>{void refresh();const timer=setInterval(()=>{if(!document.hidden)void refresh();},60000);return()=>clearInterval(timer);},[refresh]);
+ useEffect(()=>{void refresh();},[refresh]);
  const snapshot=monitor?.snapshot,reliable=!!monitor?.reliable&&!error;
  const currentCopyRules=snapshot?.copyRulesVersion===COPY_RULES_VERSION;
  useEffect(()=>{
@@ -33,7 +33,7 @@ export default function AiAdsManager(){
  const pages=Math.max(1,Math.ceil(parts.length/100)),currentPage=Math.min(page,pages-1);
  return <div className="setup-page"><header className="setup-header"><a href="/" className="secondary">Dashboard</a><strong>GSMWEB</strong><a href="/optimizer" className="secondary">Ads monitoring and chat</a></header>
  <main className="setup-main"><h1>Stock & drafts</h1>
- <div className="setup-actions"><button className="primary" disabled={busy} onClick={()=>void refresh()}>{busy?'Checking stock…':'Refresh stock'}</button><button className="secondary" onClick={()=>{
+ <div className="setup-actions"><button className="primary" disabled={busy} onClick={()=>void refresh(true)}>{busy?'Checking stock…':'Refresh stock'}</button><button className="secondary" onClick={()=>{
   if(!('speechSynthesis' in window)){setVoiceNotice('This browser cannot play voice warnings. Text alerts remain available.');return;}
   if(voice){window.speechSynthesis.cancel();setVoice(false);}else{const message=new SpeechSynthesisUtterance('Stock voice warnings are enabled while this dashboard is open.');window.speechSynthesis.speak(message);setVoice(true);}
  }}>{voice?'Mute stock voice warnings':'Enable stock voice warnings'}</button></div>

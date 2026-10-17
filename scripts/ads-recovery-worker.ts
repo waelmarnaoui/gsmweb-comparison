@@ -5,6 +5,8 @@ import {CONTROL_VERSION,validAccount} from '../lib/ads-control/rules';
 import {controlStore} from '../lib/ads-control/store';
 import {createControlEngine} from '../lib/ads-control/engine';
 import {createControlGoogle,isGoogleQuotaError} from '../lib/ads-control/google';
+import {ADS_WEB_ONLY} from '../lib/ads-web-mode';
+if(ADS_WEB_ONLY){console.info('Web-only mode: laptop recovery worker is disabled.');process.exit(0);}
 const required=(name:string)=>{const value=process.env[name];if(!value)throw new Error('Recovery configuration is incomplete.');return value;};
 const account=validAccount(required('GOOGLE_ADS_CUSTOMER_ID')),deployment=required('ADS_CONTROL_RECOVERY_DEPLOYMENT_ID');
 if(deployment.length>100)throw new Error('Recovery configuration is invalid.');

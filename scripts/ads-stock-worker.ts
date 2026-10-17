@@ -1,5 +1,7 @@
 /** Optional always-on scheduler. Does not require a browser or Vercel account access. */
 export {};
+import {ADS_WEB_ONLY} from '../lib/ads-web-mode';
+if(ADS_WEB_ONLY){console.info('Web-only mode: laptop Ads worker is disabled.');process.exit(0);}
 const appOrigin=new URL(process.env.APP_URL??'');
 if(appOrigin.protocol!=='https:'||appOrigin.pathname!=='/'||appOrigin.username||appOrigin.password||appOrigin.search||appOrigin.hash)throw new Error('Set the production APP_URL origin.');
 const secret=process.env.ADS_CONTROL_CRON_SECRET;

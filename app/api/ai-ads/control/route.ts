@@ -8,6 +8,9 @@ import {createLaptopPairing} from '@/lib/ads-control/pairing-server';
 import {cancelAction} from '@/lib/ads-control/server';
 import {ControlProviderError} from '@/lib/ads-control/google';
 import {resourceReadError} from '@/lib/ads-control/resource-loader';
+import {ADS_WEB_ONLY} from '@/lib/ads-web-mode';
+import {collectAdsObservation} from '@/lib/ads-monitor-server';
+import {IntegrationError} from '@/lib/integration-error';
 const controlError=(error:unknown)=>error instanceof ControlProviderError?Response.json({error:resourceReadError(error)},{status:503}):apiError(error);
 export const maxDuration=300;
 export async function GET(request:Request){try{
@@ -18,6 +21,11 @@ export async function POST(request:Request){try{
  const {user}=await requireAdmin();sameOrigin(request);
  if(Number(request.headers.get('content-length')??0)>5000)throw new Error('Request too large.');
  const input=await request.json();
+ if(ADS_WEB_ONLY){
+  if(input.operation==='tick'){const report=await collectAdsObservation();return Response.json({checked:true,readOnly:true,reportingAvailable:true,fetchedAt:report.fetchedAt,mode:'web_only'});}
+  if(input.operation==='resources')return Response.json(await controlResources(true),{headers:{'Cache-Control':'no-store'}});
+  if(input.operation!=='cancel')throw new IntegrationError('Ad automation and laptop pairing are paused in web-only mode. Use manual reporting or conversion review.',409);
+ }
  const text=(name:string,max=200)=>{if(typeof input[name]!=='string'||!input[name]||input[name].length>max)throw new Error('Invalid control request.');return input[name] as string;};
  const id=()=>{const value=text('id',36);if(!/^[a-f0-9-]{36}$/i.test(value))throw new Error('Invalid action.');return value;};
  switch(input.operation){

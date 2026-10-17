@@ -15,6 +15,8 @@ import {readRepairInventory} from '../ai-ads/source';
 import type {AgentAlert} from '../agent-policy';
 import {loadControlResources} from './resource-loader';
 import {policyOnlyIntervention} from '../ai-ads/intervention-server';
+import {ADS_WEB_ONLY} from '../ads-web-mode';
+import {webAdsResources} from '../ads-web-server';
 const safeError=(message:string)=>new IntegrationError(message,503);
 const monitorDeployment=(settings:{recovery_deployment_id?:string|null})=>process.env.ADS_CONTROL_MONITOR_DEPLOYMENT_ID??settings.recovery_deployment_id??'dashboard';
 export function controlGoogle(){return createControlGoogle({accountId:agentAccount(),developerToken:process.env.GOOGLE_ADS_DEVELOPER_TOKEN??'',loginCustomerId:process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID,token:async()=>(await connectionToken('google_ads_management')).token});}
@@ -43,7 +45,8 @@ export async function readControl(){
   products:stock.reliable?(stock.snapshot?.parts??[]).filter(p=>p.category==='PART'&&advertisingPartType(p.partType)).map(p=>({id:p.id,name:p.name,available:p.available,eligible:p.eligible,fingerprint:p.fingerprint})):[],
   limitations:['Existing ads, keywords, campaigns and budgets are protected. Search monitoring only prepares additional drafts and notifications.','Temporary campaign pauses recover after eight minutes, leaving a two-minute margin. Provider or infrastructure outages can still delay recovery.','New ad publication remains policy-blocked. Bid optimization, new campaigns, budget increases and targeting changes are outside this release.','Google reporting can lag. Daily allowances are monitoring safeguards, not a guaranteed billing cap.']};
 }
-export async function controlResources(){
+export async function controlResources(refresh=false){
+ if(ADS_WEB_ONLY)return webAdsResources(refresh);
  const accountId=agentAccount();
  const result=await loadControlResources(()=>createAdPolicyReader({accountId,developerToken:process.env.GOOGLE_ADS_DEVELOPER_TOKEN,loginCustomerId:process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID,token:async()=>(await connectionToken('google_ads_management')).token}).collect(),()=>controlGoogle().campaigns());
  if(result.errors.length){
@@ -76,6 +79,7 @@ export async function unlinkProduct(resource:string){
  finally{await store.unlock(account,token);}
 }
 export async function proposeAction(actor:string,input:{kind:Kind;resource:string;value:string;requestId:string}){
+ if(ADS_WEB_ONLY)throw new IntegrationError('Ad changes are paused in web-only mode. No laptop is required for manual reporting or conversion uploads.',409);
  if(!/^[a-f0-9-]{36}$/i.test(input.requestId))throw new Error('Invalid request identity.');
  const {db,account,store}=await setupControl();
  if((await store.settings(account)).protect_existing_ads!==false)throw new IntegrationError('Existing ads and campaign settings are protected. Only new stock-matched drafts may be prepared.',409);
@@ -101,6 +105,7 @@ export async function cancelAction(actor:string,id:string){
  if(r.error)throw safeError(controlStorageMessage);if(!r.data?.length)throw new IntegrationError('Only a pending proposal can be cancelled. An in-flight action must be verified or rolled back.',409);
 }
 async function preflight(a:Action){
+ if(ADS_WEB_ONLY)throw new Error('web_only_ads_writes_disabled');
  if(a.account_id!==agentAccount())throw new Error('Account changed.');
  if(await policyOnlyIntervention())throw new Error('policy_only_existing_resources_protected');
  if(a.kind!=='ad_status')return;
@@ -141,6 +146,7 @@ export async function proposeRollback(actor:string,id:string,requestId:string){
  return proposeAction(actor,{kind:a.kind,resource:a.resource_name,value:a.before_value,requestId});
 }
 export async function runStockControlTick(interactive=false,registeredDeployment?:string){
+ if(ADS_WEB_ONLY)return {checked:false,changed:0,reliable:false,mode:'web_only'};
  const {db,account,store}=await setupControl(),deployment=interactive?'dashboard':registeredDeployment??process.env.ADS_CONTROL_MONITOR_DEPLOYMENT_ID;
  if(!deployment||deployment.length>100)throw safeError('Configure the stock worker deployment identity.');
  const stock=await collectStockMonitor();
@@ -184,7 +190,7 @@ export async function readControlAlerts():Promise<AgentAlert[]>{
  try{
   const db=service(),account=agentAccount(),settings=await controlStore(db).settings(account),beats=await controlHeartbeats(db,account);
   const alerts:AgentAlert[]=[];
-  if(settings.stock_enabled&&!settings.global_paused&&stockControlReady(settings,beats,monitorDeployment(settings),true).length)alerts.push({key:'stock-control-worker-stale',level:'critical',message:'Automatic stock control has lost its worker health check. Current inventory-to-ad synchronization is unconfirmed. Open Account control and restart checks.'});
+  if(!ADS_WEB_ONLY&&settings.stock_enabled&&!settings.global_paused&&stockControlReady(settings,beats,monitorDeployment(settings),true).length)alerts.push({key:'stock-control-worker-stale',level:'critical',message:'Automatic stock control has lost its worker health check. Current inventory-to-ad synchronization is unconfirmed. Open Account control and restart checks.'});
   const actions=await db.from('ga_ads_actions').select('id,kind,state,recovery_due_at,error_code').eq('account_id',account).in('state',['executing','uncertain','failed','confirmed']).order('created_at',{ascending:false}).limit(100);
   if(actions.error)throw new Error('Storage unavailable.');
   for(const a of actions.data??[]){
@@ -192,5 +198,5 @@ export async function readControlAlerts():Promise<AgentAlert[]>{
    else if(a.state==='uncertain')alerts.push({key:'ads-action-uncertain:'+a.id,level:'warning',message:'Google Ads could not confirm an account change. The agent has not retried the change. Review Account control.'});
   }
   return alerts;
- }catch{return [{key:'control-health-unavailable',level:'warning',message:'Account-control health could not be checked. Review worker status and the live account before relying on automation.'}];}
+ }catch{return [{key:'control-health-unavailable',level:'warning',message:'Account-control health could not be checked. Review saved action history and the live account before relying on automation.'}];}
 }

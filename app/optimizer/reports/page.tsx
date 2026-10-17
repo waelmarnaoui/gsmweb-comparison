@@ -19,7 +19,7 @@ export default function CampaignReports(){
   if(params.get('error'))setNotice(params.get('error')!);
   else if(params.get('connected')==='google_ads_management')setNotice('Reporting account authorized. Collect a report to verify account access.');
   window.history.replaceState({},'',window.location.pathname);void refresh();
-  const timer=setInterval(()=>{if(!document.hidden)void refresh();},30000);return()=>clearInterval(timer);
+  // Saved reports load once; Google collection requires the explicit button.
  },[]);
  async function run(action:()=>Promise<void>){setBusy(true);setNotice('');try{await action();}catch(error){setNotice(error instanceof Error?error.message:'Request failed.');}finally{setBusy(false);}}
  const observation=report?.observation;

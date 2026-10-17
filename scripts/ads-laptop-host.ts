@@ -2,10 +2,12 @@ import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import path from 'node:path';
 import {windowsProtect} from './ads-worker-dpapi';
+import {ADS_WEB_ONLY} from '../lib/ads-web-mode';
 const directory=path.resolve(process.env.ADS_WORKER_DIRECTORY??path.join(process.cwd(),'work','ads-laptop-runtime'));
 let stopping=false,children:ReturnType<typeof spawn>[]=[];
 process.on('SIGINT',()=>{stopping=true;children.forEach(child=>child.kill());});process.on('SIGTERM',()=>{stopping=true;children.forEach(child=>child.kill());});
 async function main(){
+ if(ADS_WEB_ONLY){console.info('Web-only mode: laptop host is disabled.');return;}
  await mkdir(directory,{recursive:true});
  await writeFile(path.join(directory,'host.pid'),String(process.pid));
  while(!stopping){
