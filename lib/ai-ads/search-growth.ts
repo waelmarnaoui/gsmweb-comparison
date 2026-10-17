@@ -31,8 +31,9 @@ export function searchStockMatch(term:string,parts:InventoryPart[]){
   if(m.length<3||!aliases.some(a=>a.length>=3&&(` ${normalized} `).includes(` ${a} `)))return [];
   // Never match an iPhone 15 Pro search to the Pro Max or vice versa, even if
   // only the shorter variant is stocked. Unknown model aliases are not invented.
-  const qualifiers=normalized.split(' ').filter(t=>['pro','max','plus','mini','ultra','lite','fe'].includes(t));
+  const qualifiers=normalized.split(' ').filter(t=>['pro','max','plus','mini','ultra','lite','fe','se','fold','flip','edge'].includes(t));
   if(qualifiers.some(q=>!m.split(' ').includes(q)))return [];
+  if([...normalized.matchAll(/\b([45]) g\b/g)].some(q=>!m.includes(q[0])))return [];
   return [{part,model,length:m.length}];
  }));
  candidates.sort((a,b)=>b.length-a.length||(b.part.available??0)-(a.part.available??0)||a.part.id.localeCompare(b.part.id));

@@ -12,6 +12,8 @@ test('reported misspelling matches verified model and part, never a different va
  assert.equal(searchStockMatch('display iphone 15 pro max',[part('iPhone 15 Pro')]),null);
  assert.equal(searchStockMatch('display iphone 15 pro',[part()]),null);
  assert.equal(searchStockMatch('display iphone15 pro max',[part('Apple iPhone 15 Pro Max')])?.model,'Apple iPhone 15 Pro Max');
+ assert.equal(searchStockMatch('display Samsung A14 5G',[part('Samsung A14')]),null);
+ assert.equal(searchStockMatch('display iphone 15 SE',[part('iPhone 15')]),null);
  assert.equal(searchStockMatch('display iphone 15 pro max si iphone 14',[part(),part('iPhone 14')]),null);
 });
 test('zero stock, wrong part, irrelevant or sensitive search terms do not qualify',()=>{
