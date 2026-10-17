@@ -8,6 +8,8 @@ test('observation migration isolates browser roles and appends idempotently',asy
    create schema auth; create table auth.users(id uuid primary key);
    insert into auth.users values ('00000000-0000-0000-0000-000000000001');`);
   await db.exec(await readFile('supabase/CONNECTIONS-PROPOSED.sql','utf8'));
+  await db.exec(await readFile('supabase/CONNECTIONS-PROPOSED.sql','utf8'));
+  assert.equal((await db.query<{n:number}>("select count(*)::int as n from pg_trigger where tgname='ga_connection_change' and tgrelid='public.ga_connections'::regclass")).rows[0]?.n,1);
   await db.exec(await readFile('supabase/ADS-OBSERVATION-PROPOSED.sql','utf8'));
   await db.exec(await readFile('supabase/ADS-OBSERVATION-PROPOSED.sql','utf8'));
   await db.exec(`set role service_role;
