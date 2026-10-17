@@ -2,7 +2,7 @@
 
 import {useCallback,useEffect,useRef,useState} from 'react';
 
-import PublishingPanel from '@/components/publishing-panel';
+
 
 import {COPY_RULES_VERSION} from '@/lib/ai-ads/copy-rules';
 
@@ -46,31 +46,15 @@ export default function SearchOpportunities(){
 
  const report=data?.report,search=report?.search,current=!!data?.reliable&&!error;
 
- return <div className="setup-page"><header className="setup-header"><a href="/ai-ads" className="secondary">Stock and drafts</a><strong>GSMWEB</strong><a href="/ai-ads/control" className="secondary">Account control</a></header><main className="setup-main">
-
- <h1>Search opportunities</h1><p>The agent checks the actual Google Search campaign schedules and matches reported searches to verified display, battery and charging-port stock. Existing ads, keywords, campaign settings and budgets stay protected.</p>
-
- <div className="agent-actions"><button disabled={busy} onClick={()=>void refresh()}>{busy?'Checking…':'Refresh searches and stock'}</button><button className="secondary" onClick={()=>{if(!('speechSynthesis' in window)){setError('Voice is unavailable in this browser.');return;}setVoice(v=>!v);if(!voice){const u=new SpeechSynthesisUtterance('Voice notifications enabled for new advertising drafts while this page is open.');u.lang='en-GB';window.speechSynthesis.speak(u);}}}>{voice?'Turn voice off':'Enable voice notifications'}</button></div>
-
- <p>This page checks every minute while visible; fresh reports are reused for five minutes. The paired laptop also checks in the background while its worker is running. Voice requires this page to remain open and visible.</p>
-
- {error&&<p role="alert">{error}</p>}{data?.error&&<p role="alert">Latest search collection failed: {data.error}. Historical results below are not current.</p>}
-
- {!current&&data&&<p role="alert">Current search and inventory evidence is unconfirmed. Drafts below must be rechecked before use.</p>}
-
- {search&&<section className="agent-review"><h2>{current?'Monitoring current':'Historical monitoring result'}</h2><p>Account {search.accountId} · {search.timeZone} · {search.currency}. Last complete collection {new Date(search.fetchedAt).toLocaleString()}.</p><p>{report!.activeCampaigns.length} campaigns were within their enabled schedule at collection. {search.termsCollected?`${search.terms.length} reported search terms collected for ${search.windowStart} through ${search.windowEnd}.`:'Search-term collection waits until an enabled campaign enters its working schedule.'}</p><p>Google hides some search terms and reporting can lag. These are your account’s reported searches; they do not represent the entire market or live search volume.</p><details><summary>Campaign schedules</summary>{search.campaigns.map(c=><p key={c.id}>{c.name} · {c.status} · {c.schedule.length?c.schedule.map(s=>`${s.day} ${String(Math.floor(s.start/60)).padStart(2,'0')}:${String(s.start%60).padStart(2,'0')}–${String(Math.floor(s.end/60)).padStart(2,'0')}:${String(s.end%60).padStart(2,'0')}`).join(', '):'All hours in Google configuration'}{c.startDate?` · starts ${c.startDate}`:''}{c.endDate?` · ends ${c.endDate}`:''}</p>)}</details></section>}
-
- <PublishingPanel voice={voice}/><section className="agent-review"><h2>Additional ad drafts</h2><p>These truthful installation-only drafts can enter automatic Google review when authorized above. Their internal restricted-service warning remains visible. New groups stay paused until Google clears the exact ad; a business-policy rejection stops automatic activation and wording retries. <a href="https://support.google.com/adspolicy/answer/13527027?hl=en" target="_blank" rel="noreferrer">Google’s official policy</a>.</p>
-
- {report&&report.copyRulesVersion!==COPY_RULES_VERSION&&<p role="status">Saved drafts use earlier copy rules and are hidden until the next complete collection, normally within five minutes.</p>}
-
- {(report?.copyRulesVersion===COPY_RULES_VERSION?report.opportunities:[]).map(o=><details key={o.id}><summary>{o.model} · {o.partType} · {o.stock} in stock at preparation · Prepared draft — see publication status above</summary><p>{o.explanation}</p><p>Campaign: {o.campaignName}. Search evidence: {o.observedTerms.join('; ')}. {o.impressions} impressions · {o.clicks} clicks · {Number(o.costMicros)/1000000} {search?.currency} reported spend. This is not a forecast or profit estimate.</p><p>Stock fingerprint {o.inventoryFingerprint.slice(0,12)}. Any later publication requires a fresh stock read and policy review. Parts are for installation in store, not online sale.</p>{o.draft.pinnedHeadlines?.map(p=><p key={p.field}>Required headline position 1: {p.text}</p>)}{o.draft.pinnedDescriptions?.map(p=><p key={p.field}>Required description position 1: {p.text}</p>)}<h3>15 headlines</h3><ol>{o.draft.headlines.map((h,i)=><li key={i}>{h}</li>)}</ol><h3>Descriptions</h3><ul>{o.draft.descriptions.map((d,i)=><li key={i}>{d}</li>)}</ul><h3>Keyword suggestions</h3><ul>{o.draft.keywords.map((k,i)=><li key={i}>{k.matchType}: {k.text}</li>)}</ul><p>Publishing blocked — policy clearance required.</p></details>)}
-
- {report&&!report.opportunities.length&&<p>No new stock-matched opportunities were prepared in this collection. This does not mean there is no demand.</p>}{!report&&<p>No complete search collection has been stored yet.</p>}</section>
-
- <section className="agent-review" aria-live="polite"><h2>Notifications</h2><p>Every new draft is recorded once for the same product, search group and copy. A prepared draft is not a published ad. Existing original ads are protected. Submission and agent-created group changes appear in automatic publication history above.</p>{data?.notifications.map(n=><p key={n.notification_key}>{new Date(n.created_at).toLocaleString()} · {n.details.message}</p>)}{data&&!data.notifications.length&&<p>No new draft notifications yet.</p>}</section>
-
- </main></div>;
-
+ return <main className="setup-main"><div className="workspace-heading"><h1>Create ads</h1><a className="secondary" href="/optimizer/ads">Ads & status</a></div>
+ <div className="workspace-toolbar"><button className="primary" disabled={busy} onClick={()=>void refresh()}>{busy?'Preparing drafts...':'Prepare drafts from searches & stock'}</button><span className="agent-small">{report?.opportunities.length??0} prepared drafts</span></div>
+ {error&&<p role="alert" className="agent-notice">{error}</p>}{data?.error&&<p role="alert" className="agent-notice">Latest collection failed: {data.error}. Saved results are not current.</p>}{!current&&data&&<p role="alert">Current stock and search evidence is unconfirmed.</p>}
+ {search&&<p className="agent-small">{search.terms.length} reported searches · {report!.activeCampaigns.length} campaigns within their schedule · Last collection: {new Date(search.fetchedAt).toLocaleString('ro-RO',{timeZone:'Europe/Bucharest'})}</p>}
+ {report&&report.copyRulesVersion!==COPY_RULES_VERSION&&<p role="status">Drafts need a complete collection with current copy rules.</p>}
+ <div className="table-scroll"><table><thead><tr><th>Model</th><th>Part / stock</th><th>Search evidence</th><th>Draft review</th></tr></thead><tbody>{(report?.copyRulesVersion===COPY_RULES_VERSION?report.opportunities:[]).map(o=><tr key={o.id}><td><b>{o.model}</b><small>{o.campaignName}</small></td><td>{o.partType}<small>{o.stock} available at preparation</small></td><td>{o.observedTerms.join('; ')}<small>{o.impressions} impressions · {o.clicks} clicks</small></td><td><details><summary>Review ad assets</summary><p>{o.explanation}</p><p>Campaign: {o.campaignName}. Search evidence: {o.observedTerms.join('; ')}. {o.impressions} impressions · {o.clicks} clicks · {Number(o.costMicros)/1000000} {search?.currency} reported spend. This is not a forecast or profit estimate.</p><p>Stock fingerprint {o.inventoryFingerprint.slice(0,12)}. Any later publication requires a fresh stock read and policy review. Parts are for installation in store, not online sale.</p>{o.draft.pinnedHeadlines?.map(p=><p key={p.field}>Required headline position 1: {p.text}</p>)}{o.draft.pinnedDescriptions?.map(p=><p key={p.field}>Required description position 1: {p.text}</p>)}<h3>15 headlines</h3><ol>{o.draft.headlines.map((h,i)=><li key={i}>{h}</li>)}</ol><h3>Descriptions</h3><ul>{o.draft.descriptions.map((d,i)=><li key={i}>{d}</li>)}</ul><h3>Keyword suggestions</h3><ul>{o.draft.keywords.map((k,i)=><li key={i}>{k.matchType}: {k.text}</li>)}</ul><p>Draft evidence only. Publication and policy decisions are recorded under Ads & status.</p></details></td></tr>)}</tbody></table></div>
+ {report&&!report.opportunities.length&&<p className="empty-state">No stock-matched drafts available from the reported searches.</p>}{!report&&!busy&&<p className="empty-state">No complete search collection yet.</p>}
+ <details className="publishing-settings"><summary>Publication safeguards</summary><p>Preparation does not publish an ad. New truthful installation-only ads enter Google review through the separately authorized publishing workflow. Groups remain paused until exact Google approval and current stock, campaign schedule, targeting and allowance checks pass. Original ads and budgets stay protected.</p><p>Google can restrict third-party technical-support offers. A business-policy rejection is not corrected by disguising a repair as a part sale. <a href="https://support.google.com/adspolicy/answer/13527027?hl=en" target="_blank" rel="noreferrer">Google policy</a>.</p><p><a href="/optimizer/ads">Publishing settings and actual submission results</a></p></details>
+ <details className="publishing-settings"><summary>Recent draft notifications ({data?.notifications.length??0})</summary><div className="table-scroll"><table><thead><tr><th>Time</th><th>Event</th></tr></thead><tbody>{data?.notifications.map(item=><tr key={item.notification_key}><td>{new Date(item.created_at).toLocaleString('ro-RO',{timeZone:'Europe/Bucharest'})}</td><td>{item.details.message}</td></tr>)}</tbody></table></div></details>
+ </main>;
 }
 
