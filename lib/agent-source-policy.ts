@@ -4,7 +4,7 @@ export function sourcePath(value:unknown){
  return value;
 }
 export function sourceContent(text:string){
- if(text.length>50000||/-----BEGIN [\w ]*PRIVATE KEY-----|sk-ant-[a-zA-Z0-9_-]{20,}|github_pat_[a-zA-Z0-9_]{20,}|gh[pousr]_[a-zA-Z0-9]{20,}|GOCSPX-[a-zA-Z0-9_-]{10,}|ya29\.[a-zA-Z0-9_-]{20,}|sb_secret_[a-zA-Z0-9_-]{10,}|eyJ[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]+\./.test(text))throw new Error('Source contains secret-like material or exceeds the reading limit.');
+ if(text.length>50000||/-----BEGIN [\w ]*PRIVATE KEY-----|sk-ant-[a-zA-Z0-9_-]{20,}|AIza[a-zA-Z0-9_-]{30,}|AQ\.[a-zA-Z0-9._~-]{20,}|github_pat_[a-zA-Z0-9_]{20,}|gh[pousr]_[a-zA-Z0-9]{20,}|GOCSPX-[a-zA-Z0-9_-]{10,}|ya29\.[a-zA-Z0-9_-]{20,}|sb_secret_[a-zA-Z0-9_-]{10,}|eyJ[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]+\./.test(text))throw new Error('Source contains secret-like material or exceeds the reading limit.');
  return text;
 }
 export function validateSourceFiles(files:{path:string;content:string}[]){

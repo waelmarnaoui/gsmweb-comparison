@@ -1,11 +1,13 @@
 export const DEFAULT_ADVISOR_MODEL='gemini-3.8-flash';
+export const ADVISOR_KEY_MAX_LENGTH=4096;
 export function advisorModel(value:unknown){if(value===undefined||value===null||value==='')return DEFAULT_ADVISOR_MODEL;if(typeof value!=='string'||!/^gemini-[a-zA-Z0-9][a-zA-Z0-9._-]{0,100}$/.test(value))throw new Error('Choose a valid Gemini model ID.');return value;}
-export function advisorKey(value:unknown):value is string{return typeof value==='string'&&/^AIza[a-zA-Z0-9_-]{30,200}$/.test(value);}
+export function advisorKey(value:unknown):value is string{return typeof value==='string'&&value.length<=ADVISOR_KEY_MAX_LENGTH&&/^(?:AIza[a-zA-Z0-9_-]{30,}|AQ\.[a-zA-Z0-9._~-]{20,})$/.test(value);}
+export function normalizeAdvisorKey(value:unknown):string|null{if(typeof value!=='string')return null;const key=value.trim();return advisorKey(key)?key:null;}
 export function selectGeminiConfiguration(saved:{credentials:{access_token:string};metadata:Record<string,string>}|null|undefined,env:Record<string,string|undefined>){
  // Never reinterpret the previous provider's encrypted credentials as a Google key.
  const google=saved?.metadata.provider==='google'?saved:null;
- const key=google?.credentials.access_token||env.GOOGLE_GENERATIVE_AI_API_KEY||env.GEMINI_API_KEY||null;
- return {key:advisorKey(key)?key:null,model:advisorModel(google?.metadata.model||env.GEMINI_ADVISOR_MODEL),source:google?.credentials.access_token?'encrypted_app_settings':key?'server_environment':'missing_key',configured:advisorKey(key),provider:'google' as const};
+ const key=normalizeAdvisorKey(google?.credentials.access_token||env.GOOGLE_GENERATIVE_AI_API_KEY||env.GEMINI_API_KEY);
+ return {key,model:advisorModel(google?.metadata.model||env.GEMINI_ADVISOR_MODEL),source:google?.credentials.access_token?'encrypted_app_settings':key?'server_environment':'missing_key',configured:key!==null,provider:'google' as const};
 }
 export function advisorFailure(status:number,code:unknown){
  if(status===401||status===400&&code==='API_KEY_INVALID')return 'Google rejected the Gemini API key. Replace it in AI settings.';
