@@ -1,6 +1,7 @@
 // Reporting only: this module deliberately exposes no Google Ads mutate method.
 export const ADS_REPORTING_VERSION = 'v26';
 export const TARGET_CPC_RON = 3;
+export class AdsReportingError extends Error{constructor(public readonly httpStatus:number){super(`Google Ads reporting failed (${httpStatus}). Check authorization and API access.`);}}
 export type CampaignObservation = {
  id:string; name:string; status:string; strategy:string; clicks:number; costMicros:string;
  searchShare:number|null; topShare:number|null; absoluteTopShare:number|null;
@@ -56,7 +57,7 @@ export function createAdsObserver(options:Options){
     });
     const requestId=response.headers.get('request-id');if(requestId)requestIds.push(requestId);
     // Never forward a provider body: it may contain sensitive account data.
-    if(!response.ok)throw new Error(`Google Ads reporting failed (${response.status}). Check authorization and API access.`);
+    if(!response.ok)throw new AdsReportingError(response.status);
     const data=await response.json();
     if(data.error||data.partialFailureError||(data.results!==undefined&&!Array.isArray(data.results)))throw new Error('Incomplete Google Ads response.');
     rows.push(...(data.results??[]));

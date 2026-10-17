@@ -14,6 +14,7 @@ import {IntegrationError} from '../integration-error';
 import {readRepairInventory} from '../ai-ads/source';
 import type {AgentAlert} from '../agent-policy';
 import {loadControlResources} from './resource-loader';
+import {policyOnlyIntervention} from '../ai-ads/intervention-server';
 const safeError=(message:string)=>new IntegrationError(message,503);
 const monitorDeployment=(settings:{recovery_deployment_id?:string|null})=>process.env.ADS_CONTROL_MONITOR_DEPLOYMENT_ID??settings.recovery_deployment_id??'dashboard';
 export function controlGoogle(){return createControlGoogle({accountId:agentAccount(),developerToken:process.env.GOOGLE_ADS_DEVELOPER_TOKEN??'',loginCustomerId:process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID,token:async()=>(await connectionToken('google_ads_management')).token});}
@@ -101,6 +102,7 @@ export async function cancelAction(actor:string,id:string){
 }
 async function preflight(a:Action){
  if(a.account_id!==agentAccount())throw new Error('Account changed.');
+ if(await policyOnlyIntervention())throw new Error('policy_only_existing_resources_protected');
  if(a.kind!=='ad_status')return;
  if(a.source==='owner'&&a.after_value==='PAUSED')return;
  const db=service(),mapping=await db.from('ga_ads_product_ads').select('*').eq('account_id',a.account_id).eq('resource_name',a.resource_name).eq('active',true).maybeSingle();
@@ -143,7 +145,7 @@ export async function runStockControlTick(interactive=false,registeredDeployment
  if(!deployment||deployment.length>100)throw safeError('Configure the stock worker deployment identity.');
  const stock=await collectStockMonitor();
  const r=await db.from('ga_ads_control_workers').upsert({account_id:account,role:'monitor',deployment_id:deployment,version:CONTROL_VERSION,checked_at:new Date().toISOString(),ok:stock.reliable});if(r.error)throw safeError(controlStorageMessage);
- const settings=await store.settings(account);if(settings.protect_existing_ads!==false||settings.global_paused||!settings.stock_enabled||!stock.reliable)return {checked:true,changed:0,reliable:stock.reliable};
+ const settings=await store.settings(account);if(await policyOnlyIntervention()||settings.protect_existing_ads!==false||settings.global_paused||!settings.stock_enabled||!stock.reliable)return {checked:true,changed:0,reliable:stock.reliable};
  const expired=await db.from('ga_ads_actions').update({state:'expired',error_code:'approval_expired',updated_at:new Date().toISOString()}).eq('account_id',account).in('state',['proposed','approved']).lte('expires_at',new Date().toISOString());if(expired.error)throw safeError(controlStorageMessage);
  const unresolved=await db.from('ga_ads_actions').select('id').eq('account_id',account).neq('kind','campaign_pause').in('state',['executing','uncertain']).order('created_at').limit(3);if(unresolved.error)throw safeError(controlStorageMessage);
  for(const a of unresolved.data??[])await serverControlEngine().reconcile(a.id);
