@@ -1,26 +1,33 @@
 import {digest,type InventoryPart} from './inventory';
 import {advertisingPartLabel,validHeadline,headlineFallback,restrictedCopy} from './copy-rules';
 export const MAX_COPY_VARIANTS=3;
-export type CopyVariant={id:string;label:string;headlines:string[];descriptions:string[];inventoryFingerprint:string;googleReview:'NOT_SUBMITTED';};
+export type CopyVariant={id:string;label:string;headlines:string[];descriptions:string[];inventoryFingerprint:string;googleReview:'NOT_SUBMITTED';pinnedHeadlines:{text:string;field:'HEADLINE_1'}[];pinnedDescriptions:{text:string;field:'DESCRIPTION_1'}[];};
 const fit=(text:string,max:number)=>Array.from(text).length<=max?text:null;
 export function prepareCopyVariants(part:InventoryPart):CopyVariant[]{
  if(!part.eligible||!part.models.length)throw new Error('Verified stock and compatibility are required.');
  const kind=advertisingPartLabel(part.partType);if(!kind)throw new Error('Only displays, batteries and charging ports may generate ads.');
- const model=part.models[0],dynamic=[`{KeyWord:Inlocuire ${kind}}`,`GSMWEB {KeyWord:${kind}}`,`{KeyWord:${kind}} Sector 6`];
- const common=[fit(`${kind} ${model}`,30),fit(`Inlocuire ${model}`,30),`Montaj ${kind}`,`${kind} Pentru Telefon`,`${kind} La GSMWEB`,`${kind} In Sector 6`,`${kind} Drumul Taberei`,`Verificare ${kind}`,'Inlocuire In Magazin','Evaluare La GSMWEB','Drumul Taberei Nr 138','GSMWEB Drumul Taberei','Montaj In Sector 6','Discuta Cu Echipa GSMWEB','Solicita Evaluare','Contacteaza GSMWEB','GSMWEB In Sector 6','Piese Pentru Inlocuire'];
- const description=fit(`Inlocuire ${kind.toLowerCase()} pentru ${model}. Evaluare in magazin la GSMWEB.`,90)??`Inlocuire ${kind.toLowerCase()} pentru telefon. Solicita o evaluare in magazin la GSMWEB.`;
- const descriptions=[description,'Disponibilitatea pieselor se confirma in magazin. Drumul Taberei 138, Sector 6.','Contacteaza GSMWEB pentru verificarea piesei necesare si detalii despre montaj.','Inlocuire si montaj in magazin. Contacteaza-ne pentru o evaluare a telefonului.'];
+ const model=part.models[0];
+ // The complete default headline is inside the official insertion syntax.
+ const dynamic=[`{KeyWord:${kind}}`,'{KeyWord:GSMWEB Drumul Taberei}',`{KeyWord:${kind} Sector 6}`];
+ const installation=['Cu Montaj In Magazin',`Montaj ${kind}`];
+ const common=[fit(`${kind} ${model}`,30),`${kind} La GSMWEB`,`${kind} In Sector 6`,`${kind} Drumul Taberei`,'Drumul Taberei Nr 138','GSMWEB Drumul Taberei','Discuta Cu Echipa GSMWEB','Contacteaza GSMWEB','GSMWEB In Sector 6','Detalii La GSMWEB','Viziteaza GSMWEB','GSMWEB Bucuresti','Verifica Modelul Cu Echipa','Drumul Taberei Sector 6'];
+ const disclosure='Piesa se furnizeaza numai cu montaj in magazin. Nu se vinde separat.';
+ const modelDescription=fit(`${kind} pentru ${model}, cu montaj in magazin la GSMWEB.`,90)??`${kind} pentru telefon, cu montaj in magazin la GSMWEB. Verifica modelul cu echipa.`;
+ const descriptions=[disclosure,modelDescription,'GSMWEB, Drumul Taberei 138, Sector 6. Disponibilitatea se confirma in magazin.','Contacteaza GSMWEB pentru compatibilitate, disponibilitate si detalii despre montaj.'];
  if(descriptions.some(text=>restrictedCopy(text)||/[{}]/.test(text)||Array.from(text).length>90))throw new Error('Recorded model text requires copy review before drafting.');
  function headlines(priority:(string|null)[]){
-  const seen=new Set<string>();const selected=[...dynamic,...priority,...common].filter((text):text is string=>!!text&&validHeadline(text)).filter(text=>{const key=headlineFallback(text).toLowerCase();if(seen.has(key))return false;seen.add(key);return true;}).slice(0,15);
-  if(selected.length!==15)throw new Error('Fifteen distinct valid headlines could not be prepared.');return selected;
+  const seen=new Set<string>();const selected=[...dynamic,...installation,...priority,...common].filter((text):text is string=>!!text&&validHeadline(text)).filter(text=>{const key=headlineFallback(text).toLowerCase();if(seen.has(key))return false;seen.add(key);return true;}).slice(0,15);
+  if(selected.length!==15||selected.filter(text=>/\bmontaj\b/i.test(text)).length!==2)throw new Error('Fifteen distinct valid headlines and two installation disclosures are required.');return selected;
  }
  const sets=[
-  {label:'Recorded model',headlines:headlines([fit(`${kind} ${model}`,30),fit(`Inlocuire ${model}`,30)]),descriptions},
-  {label:'Store visit',headlines:headlines(['Drumul Taberei Nr 138','GSMWEB In Sector 6','Montaj In Drumul Taberei']),descriptions:[descriptions[1],descriptions[0],descriptions[2],descriptions[3]]},
-  {label:'Recorded part type',headlines:headlines([`Montaj ${kind}`,`Verificare ${kind}`,'Discuta Despre Inlocuire']),descriptions:[descriptions[2],descriptions[0],descriptions[1],descriptions[3]]}
+  {label:'Recorded model',headlines:headlines([fit(`${kind} ${model}`,30)]),descriptions},
+  {label:'Store visit',headlines:headlines(['Drumul Taberei Nr 138','GSMWEB In Sector 6','Viziteaza GSMWEB']),descriptions:[descriptions[0],descriptions[2],descriptions[1],descriptions[3]]},
+  {label:'Recorded part type',headlines:headlines([`${kind} La GSMWEB`,`${kind} Drumul Taberei`,'Discuta Cu Echipa GSMWEB']),descriptions:[descriptions[0],descriptions[3],descriptions[1],descriptions[2]]}
  ];
- return sets.slice(0,MAX_COPY_VARIANTS).map(copy=>({...copy,id:digest({copy,fingerprint:part.fingerprint}),inventoryFingerprint:part.fingerprint,googleReview:'NOT_SUBMITTED'}));
+ return sets.slice(0,MAX_COPY_VARIANTS).map(copy=>{
+  const assets={...copy,pinnedHeadlines:[{text:installation[0],field:'HEADLINE_1' as const}],pinnedDescriptions:[{text:disclosure,field:'DESCRIPTION_1' as const}]};
+  return {...assets,id:digest({copy:assets,fingerprint:part.fingerprint}),inventoryFingerprint:part.fingerprint,googleReview:'NOT_SUBMITTED' as const};
+ });
 }
 export type ReviewFeedback={approvalStatus:string;reviewStatus:string;topics:{topic:string;type:string}[]};
 export function nextCopyStep(input:{feedback:ReviewFeedback|null;attempts:number;internalHighRisk:boolean;stockCurrent:boolean;scopeApproved:boolean}){

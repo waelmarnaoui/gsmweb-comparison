@@ -5,6 +5,7 @@ import {connectionToken} from '../connections';
 import {collectStockMonitor} from './monitor-server';
 import {createSearchReader} from './search-reader';
 import {prepareSearchOpportunities,campaignOpen,type SearchReport} from './search-growth';
+import {COPY_RULES_VERSION} from './copy-rules';
 import {digest} from './inventory';
 import {IntegrationError} from '../integration-error';
 import {resourceReadError} from '../ads-control/resource-loader';
@@ -26,7 +27,7 @@ export async function collectGrowthMonitor(){
  if(active)return active;
  active=(async()=>{
   const previous=await readGrowthMonitor(),stamp=Date.parse(previous.report?.search?.fetchedAt??'');
-  if(previous.reliable&&Date.now()-stamp<300000||Date.now()<retryAfter)return previous;
+  if(previous.reliable&&previous.report?.copyRulesVersion===COPY_RULES_VERSION&&Date.now()-stamp<300000||Date.now()<retryAfter)return previous;
   const account=agentAccount(),db=service(),slot=new Date(Math.floor(Date.now()/300000)*300000).toISOString();
   let search:SearchReport,opportunities:ReturnType<typeof prepareSearchOpportunities>;
   try{
@@ -36,10 +37,10 @@ export async function collectGrowthMonitor(){
   }catch(error){
    retryAfter=Date.now()+60000;const saved=await db.from('ga_ads_search_runs').upsert({account_id:account,slot,status:'failed',report:null,error_code:resourceReadError(error)},{onConflict:'account_id,slot,status',ignoreDuplicates:true});if(saved.error)throw storage();return readGrowthMonitor();
   }
-  const report={search,opportunities,activeCampaigns:search.campaigns.filter(c=>campaignOpen(c,search.timeZone)).map(c=>c.id),publicationBlockedReason:'New consumer phone repair ads require policy clearance. No existing ad, keyword, budget or campaign was changed.'};
+  const report={copyRulesVersion:COPY_RULES_VERSION,search,opportunities,activeCampaigns:search.campaigns.filter(c=>campaignOpen(c,search.timeZone)).map(c=>c.id),publicationBlockedReason:'New consumer phone repair ads require policy clearance. No existing ad, keyword, budget or campaign was changed.'};
   if(Buffer.byteLength(JSON.stringify(report))>4000000)throw new IntegrationError('Search monitoring report exceeds its safe storage limit.',503);
   for(const o of opportunities){
-   const key=digest({account,id:o.id,headlines:o.draft.headlines,descriptions:o.draft.descriptions,keywords:o.draft.keywords});
+   const key=digest({account,id:o.id,headlines:o.draft.headlines,descriptions:o.draft.descriptions,pinnedHeadlines:o.draft.pinnedHeadlines,pinnedDescriptions:o.draft.pinnedDescriptions,keywords:o.draft.keywords});
    const notification=await db.from('ga_ads_growth_notifications').upsert({notification_key:key,account_id:account,opportunity_id:o.id,kind:'new_draft_prepared',details:{model:o.model,partType:o.partType,productId:o.productId,campaignId:o.campaignId,observedTerms:o.observedTerms.slice(0,3),message:`New ${o.model} ${o.partType} draft prepared from reported search terms and verified stock. Policy-blocked; not published.`}},{onConflict:'notification_key',ignoreDuplicates:true});if(notification.error)throw storage();
   }
   const saved=await db.from('ga_ads_search_runs').upsert({account_id:account,slot,status:'complete',report,error_code:null},{onConflict:'account_id,slot,status',ignoreDuplicates:true});if(saved.error)throw storage();

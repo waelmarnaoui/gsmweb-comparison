@@ -1,5 +1,5 @@
 export const AD_PART_TYPES=['display','battery','charging-port'] as const;
-export const COPY_RULES_VERSION='major-parts-15-dki-v1';
+export const COPY_RULES_VERSION='major-parts-15-full-dki-disclosure-v2';
 export type AdPartType=typeof AD_PART_TYPES[number];
 export function advertisingPartType(value:unknown):AdPartType|null{
  const normalized=typeof value==='string'?value.trim().toLowerCase():'';return AD_PART_TYPES.includes(normalized as AdPartType)?normalized as AdPartType:null;
@@ -17,7 +17,7 @@ export function headlineFallback(text:string){
  return rendered;
 }
 export function validHeadline(text:string){
- try{const fallback=headlineFallback(text);return fallback.length>0&&Array.from(fallback).length<=30&&!restrictedCopy(text)&&!/[\u0000-\u001f]/.test(text);}catch{return false;}
+ try{if(/[{}]/.test(text)&&!/^\{KeyWord:[^{}:]+\}$/.test(text))return false;const fallback=headlineFallback(text);return fallback.length>0&&Array.from(fallback).length<=30&&!restrictedCopy(text)&&!/[\u0000-\u001f]/.test(text);}catch{return false;}
 }
 export function safeKeyword(text:string){return !!text&&!restrictedCopy(text)&&!/[{}\u0000-\u001f]/.test(text)&&Array.from(text).length<=80&&text.split(/\s+/).length<=10;}
 export function insertionPreview(headline:string,keyword:string){
