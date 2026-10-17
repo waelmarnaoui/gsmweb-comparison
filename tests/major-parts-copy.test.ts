@@ -23,12 +23,24 @@ test('restricted terms are detected across accents, case and punctuation',()=>{
  for(const text of ['Inlocuire Baterie','Montaj Port Incarcare','GSMWEB'])assert.equal(restrictedCopy(text),false);
 });
 test('keyword insertion uses a reviewed keyword when it fits and a valid fallback otherwise',()=>{
- assert.equal(insertionPreview('GSMWEB {KeyWord:Display}','display Samsung S23'),'GSMWEB display Samsung S23');
- assert.equal(insertionPreview('GSMWEB {KeyWord:Display}','inlocuire display Samsung Galaxy S23 Ultra'),'GSMWEB Display');
- assert.throws(()=>insertionPreview('{KeyWord:Display}','reparatie Samsung'));assert.equal(validHeadline('{Display Samsung}'),false);
+ assert.equal(insertionPreview('{KeyWord:GSMWEB Display}','display Samsung S23'),'display Samsung S23');
+ assert.equal(insertionPreview('{KeyWord:GSMWEB Display}','inlocuire display Samsung Galaxy S23 Ultra'),'GSMWEB Display');
+ assert.throws(()=>insertionPreview('{KeyWord:Display}','reparatie Samsung'));assert.equal(validHeadline('{Display Samsung}'),false);assert.equal(validHeadline('GSMWEB {KeyWord:Display}'),false);assert.equal(validHeadline('{KeyWord:GSMWEB Drumul Taberei}'),true);
 });
 test('small-part stock does not create drafts or advertising stock alerts',()=>{
  const old=part('speaker'),before=buildStockSnapshot({sourceProject:project,complete:true,parts:[old]},null,now);
  const changed={...old,available:0,fingerprint:'changed',observedAt:new Date(now+60000).toISOString()};
  const after=buildStockSnapshot({sourceProject:project,complete:true,parts:[changed]},before,now+60000);assert.equal(after.summary.parts,0);assert.equal(after.drafts.length,0);assert.equal(after.events.length,0);
+});
+
+
+test('installation-only offer has exactly two installation headlines with required display positions',()=>{
+ for(const type of ['display','battery','charging-port'])for(const variant of generateRepairDraft(part(type),'https://gsmweb.site/',now).variants!){
+  assert.equal(variant.headlines.filter(h=>/\b(montaj|inlocuire|schimbare)\b/i.test(h)).length,2);
+  assert.equal(variant.pinnedHeadlines.length,1);assert.equal(variant.pinnedHeadlines[0].field,'HEADLINE_1');assert.ok(variant.headlines.includes(variant.pinnedHeadlines[0].text));assert.match(variant.pinnedHeadlines[0].text,/Montaj/);
+  assert.equal(variant.pinnedDescriptions[0].field,'DESCRIPTION_1');assert.equal(variant.descriptions[0],variant.pinnedDescriptions[0].text);assert.match(variant.descriptions[0],/numai cu montaj.*Nu se vinde separat/);
+  for(const h of variant.headlines.filter(h=>h.includes('{')))assert.match(h,/^\{KeyWord:[^{}]+\}$/);
+  assert.ok(!variant.headlines.some(h=>/ieftin|cel mai|rapid|garanti|original|autorizat/i.test(h)));
+ }
+ const draft=generateRepairDraft(part('battery'),'https://gsmweb.site/',now);assert.deepEqual(draft.pinnedHeadlines,draft.variants![0].pinnedHeadlines);assert.deepEqual(draft.pinnedDescriptions,draft.variants![0].pinnedDescriptions);
 });
