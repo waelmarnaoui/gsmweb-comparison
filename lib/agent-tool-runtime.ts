@@ -8,7 +8,7 @@ export async function executeRecordedTool(db:SupabaseClient,who:ToolActor,callId
  if(parent.error||!parent.data||admin.error||!admin.data)throw new Error('Authenticated owner access is required.');
  const prior=await db.from('ga_agent_tool_runs').select('id,state,result,error_code').eq('exchange_id',who.exchangeId).eq('external_id',callId).eq('actor',who.actor).maybeSingle();if(prior.error)throw new Error('Action history is unavailable.');
  if(prior.data)return prior.data.state==='completed'?prior.data.result:{status:'unconfirmed',notice:'This call is already recorded. It will not be repeated. Check its action history.'};
- if(mutating){if(who.readOnly)return {status:'blocked',notice:'Automatic report analysis cannot change settings or create jobs. Ask directly in chat.'};
+ if(mutating){if(who.readOnly)return {status:'blocked',notice:'Read Only mode cannot change settings or create jobs. Select Full Control to request supported actions under your saved permissions.'};
   const p=await db.from('ga_ads_control').select('agent_chat_enabled,agent_chat_authorization').eq('account_id',who.account).single();if(p.error||!p.data.agent_chat_enabled||!p.data.agent_chat_authorization)return {status:'blocked',notice:'Chat action permissions are disabled.'};}
  const id=randomUUID(),saved=await db.from('ga_agent_tool_runs').insert({id,exchange_id:who.exchangeId,account_id:who.account,actor:who.actor,external_id:callId,tool:name,input});
  if(saved.error)return {status:'unconfirmed',notice:'The call could not be claimed. Refresh history before retrying.'};

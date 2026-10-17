@@ -1,0 +1,14 @@
+'use client';
+import {useEffect,useState} from 'react';
+import {DEFAULT_ADVISOR_MODEL} from '@/lib/advisor-settings';
+type Status={configured:boolean;provider:string;model:string;baseURL?:string;notice:string};
+export default function ProviderSettings({onConfigured}:{onConfigured:()=>void}){
+ const [status,setStatus]=useState<Status|null>(null),[provider,setProvider]=useState('google'),[apiKey,setKey]=useState(''),[model,setModel]=useState(DEFAULT_ADVISOR_MODEL),[baseURL,setURL]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
+ useEffect(()=>{fetch('/api/optimizer/ai-settings',{cache:'no-store'}).then(async r=>{if(!r.ok)return;const d=await r.json();setStatus(d);setProvider(d.provider);setModel(d.model);setURL(d.baseURL||'');}).catch(()=>{});},[]);
+ const saved=status?.configured&&status.provider===provider;
+ async function run(operation:'save'|'test'){
+  setBusy(true);setNotice('');const key=apiKey.trim();setKey('');
+  try{const r=await fetch('/api/optimizer/ai-settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({operation,provider,baseURL,model:provider==='ollama'?'llama3.1:8b':model,...(key?{apiKey:key}:{})})});const d=await r.json();if(!r.ok)throw new Error(d.error||'Connection test failed.');setStatus(d);setNotice(operation==='save'?'Connection tested and saved securely.':'Connection test passed.');onConfigured();}catch(e){setNotice(e instanceof Error?e.message:'Connection unavailable.');}finally{setBusy(false);}
+ }
+ return <details className="agent-review advisor-connection"><summary>AI connection settings</summary><p>{status?.notice}</p><label>AI provider<select value={provider} disabled={busy} onChange={e=>{setProvider(e.target.value);setKey('');setNotice('');if(e.target.value==='google')setModel(DEFAULT_ADVISOR_MODEL);}}><option value="google">Gemini</option><option value="ollama">Ollama on my computer</option></select></label>{provider==='ollama'?<><label>Protected gateway URL<input type="url" value={baseURL} onChange={e=>setURL(e.target.value)} placeholder="https://your-gateway.ngrok-free.dev" autoComplete="off"/></label><p>llama3.1:8b · Text chat · Read-only</p></>:<label>Gemini model<input value={model} onChange={e=>setModel(e.target.value)} maxLength={108}/></label>}<label>{provider==='ollama'?'Gateway token':'Gemini API key'}<input type="password" value={apiKey} onChange={e=>setKey(e.target.value)} maxLength={4096} autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder={saved?'Leave blank to use saved secret':'Enter securely here, not in chat'}/></label><div className="agent-actions"><button type="button" disabled={busy||(!apiKey&&!saved)} onClick={()=>void run('save')}>{busy?'Testing...':'Connect and save'}</button>{saved&&<button type="button" disabled={busy} onClick={()=>void run('test')}>Test connection</button>}</div>{notice&&<p role="status">{notice}</p>}</details>;
+}

@@ -1,6 +1,7 @@
 import type {AdvisoryReply} from './advisor-reply';
 import {advisorFailure} from './advisor-settings';
 export function chatFailureMessage(error:unknown){
+ if(error instanceof Error&&error.name==='OllamaProviderError')return error.message;
  const detail=error as {name?:unknown;statusCode?:unknown}|null;
  if(typeof detail?.statusCode==='number')return advisorFailure(detail.statusCode,null);
  const name=typeof detail?.name==='string'?detail.name:'';
