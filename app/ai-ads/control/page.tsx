@@ -3,6 +3,7 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import type {Action,ControlSettings,Heartbeat,Mapping,Kind} from '@/lib/ads-control/rules';
 import type {AdPolicyRecord} from '@/lib/ads-policy-reader';
 import type {ControlCampaign} from '@/lib/ads-control/google';
+import PublishingPanel from '@/components/publishing-panel';
 import LaptopRecovery from '@/components/laptop-recovery';
 import '../../optimizer/agent.css';
 type Data={checkMode:'scheduled'|'dashboard';settings:ControlSettings;heartbeats:Heartbeat[];blockers:string[];recoveryReady:boolean;mode:string;actions:Action[];mappings:Mapping[];products:{id:string;name:string;available:number|null;eligible:boolean;fingerprint:string}[];events:{id:number;action_id:string|null;event:string;created_at:string}[];limitations:string[]};
@@ -49,7 +50,7 @@ export default function ControlCenter(){
   {resources&&<div role="status"><p>Live ads: {resources.adsComplete?resources.ads.length:'unavailable'} · Search campaigns: {resources.campaignsComplete?resources.campaigns.length:'unavailable'}</p>{resources.errors.map(error=><p key={error.section} role="alert"><strong>{error.section==='ads'?'Ads':'Campaigns'}:</strong> {error.message}</p>)}</div>}
   {stale&&<p role="alert">Current control status is unconfirmed. Refresh before relying on the status below.</p>}
   <div className="agent-actions"><button className="secondary" disabled={busy} onClick={()=>void run(refresh)}>Refresh status</button><button className="secondary" disabled={busy||!data} onClick={()=>setWatching(v=>!v)}>{watching?'Stop dashboard checks':'Start dashboard checks'}</button><button className="secondary" disabled={busy} onClick={()=>void run(async()=>{setResources(await api(undefined,true));})}>Load live ads and campaigns</button><button className="primary" disabled={busy||!data} onClick={()=>void run(()=>api({operation:'settings',paused:true}))}>Pause automation</button></div>
-  {data&&<>
+  <PublishingPanel/>{data&&<>
    {data.settings.protect_existing_ads!==false?<section className="agent-review"><h2>Existing ads are protected</h2><p>The agent cannot edit, pause or delete your existing ads, keywords, campaigns or budgets. Monitoring continues and new stock-matched drafts appear in Search opportunities.</p><a href="/ai-ads/opportunities">Open search opportunities and notifications</a></section>:<><section className="agent-review"><h2>{stale?'Status unconfirmed':data.mode==='STOCK_CONTROL'?(data.checkMode==='scheduled'||watching?'Stock control is active':'Stock control authorized — start dashboard checks'):'Advice mode'}</h2><p>Automatic stock control can pause individually linked ads when stock is unavailable, below its minimum, or product details change materially. It keeps campaigns running and leaves ad restoration for your review.</p>
     <ul>{data.blockers.map(b=><li key={b}>{b}</li>)}</ul>
     <label className="agent-confirm"><input type="checkbox" checked={ack} onChange={e=>setAck(e.target.checked)}/>I authorize automatic stock-related pauses for the ads I link below. New publishing and spending changes require separate review.</label>

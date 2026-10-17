@@ -4,6 +4,7 @@ import {businessDay,previousBusinessDate,receiptsSummary,earnedAdAllowance,monit
 import type {AdsObservation} from './ads-monitor';
 import {IntegrationError} from './integration-error';
 import {accountFx} from './ads-fx-server';
+import {advisorReadiness} from './advisor-settings-server';
 import {observationInRon} from './ads-fx';
 export function agentAccount(){
  const account=process.env.GOOGLE_ADS_CUSTOMER_ID;
@@ -21,12 +22,13 @@ export async function readAgentContext(now=Date.now()){
  const previous=(snapshots.data?.[1]?.observation??null) as AdsObservation|null;
  const today=checkins.data?.find(row=>row.business_date===business.date),prior=checkins.data?.find(row=>row.business_date===yesterday);
  const allowance=earnedAdAllowance(prior?Number(prior.amount_bani):null),dailySpendRon=allowance.allowanceBani===null?null:allowance.allowanceBani/100;
+ const aiStatus=await advisorReadiness().catch(()=>({configured:false,model:null,source:'unavailable',notice:'AI settings could not be verified. Open AI settings on the dashboard.'}));
  const fx=await accountFx(account,observation?.currency??'RON',now);
  const converted=observationInRon(observation,fx.rate,now),convertedPrevious=observationInRon(previous,fx.rate,now);
  return {accountId:account,businessDate:business.date,yesterday,checkinDue:business.checkinDue&&!today,
   today:today?{...receiptsSummary(Number(today.amount_bani)),source:today.source,confirmedAt:today.created_at}:null,
   yesterdayPaymentsBani:prior?Number(prior.amount_bani):null,allowance,
   control:controlReadiness(dailySpendRon),alerts:monitoringAlerts(converted??observation,convertedPrevious,observation?.today?.date===business.date?dailySpendRon:null,now).filter(a=>!(converted&&a.key==='currency')),observation,fx,ronObservation:converted,
-  aiConfigured:Boolean(process.env.OPENAI_API_KEY&&process.env.OPENAI_ADVISOR_MODEL),
+  aiConfigured:aiStatus.configured,aiStatus,
   limitations:['Customer payments are owner-confirmed totals, not automatically reconciled CRM profit.','Google reporting is delayed; five-minute checks do not provide five-minute source freshness.','CPA and contribution profit are unavailable until payment attribution is reconciled.','USD uses the owner-approved fixed rate of 4.74 RON. This is a reporting assumption, not a market quote or bank billing rate.']};
 }
