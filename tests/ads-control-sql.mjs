@@ -37,5 +37,14 @@ try{
  assert.equal((await db.query('select id from ga_ads_worker_pairings where token_hash=$1',['d'.repeat(64)])).rows.length,0);
  const capability=()=>db.query('select p.id from ga_ads_worker_pairings p join ga_ads_control c on c.account_id=p.account_id and c.recovery_deployment_id=p.deployment_id where p.token_hash=$1 and p.claimed_at is not null',['e'.repeat(64)]);
  assert.equal((await capability()).rows.length,0);await db.query("update ga_ads_control set recovery_deployment_id='laptop-test' where account_id=$1",[account]);assert.equal((await capability()).rows.length,1);
+ await db.exec('reset role');
+ await db.exec(await readFile(new URL('../supabase/SEARCH-GROWTH-PROPOSED.sql',import.meta.url),'utf8'));
+ await db.exec('set role service_role');
+ const protectedRow=(await db.query('select protect_existing_ads,stock_enabled,global_paused from ga_ads_control')).rows[0];assert.deepEqual(protectedRow,{protect_existing_ads:true,stock_enabled:false,global_paused:true});
+ for(const role of ['anon','authenticated']){await db.exec('reset role;set role '+role);for(const table of ['ga_ads_search_runs','ga_ads_growth_notifications'])await assert.rejects(db.query('select * from '+table),/permission denied/);}
+ await db.exec('reset role;set role service_role');
+ await db.query("insert into ga_ads_growth_notifications(notification_key,account_id,opportunity_id,kind,details) values($1,$2,'opportunity','new_draft_prepared','{}')",['f'.repeat(64),account]);
+ await assert.rejects(db.query('delete from ga_ads_growth_notifications'),/permission denied/);
+ await assert.rejects(db.query("update ga_ads_growth_notifications set details='{}'"),/permission denied/);
  console.log('PASS: control SQL executed in local PostgreSQL; default pause, exclusive fenced leases, idempotency, exact approval constraints, duplicate live intent blocked, budget increases rejected, append-only audit, RLS and browser-role access denial. No production data changed.');
 }finally{await db.close();}

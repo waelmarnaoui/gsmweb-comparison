@@ -4,7 +4,7 @@ export type Kind='ad_status'|'campaign_pause'|'budget_decrease';
 export type ActionState='proposed'|'approved'|'executing'|'confirmed'|'uncertain'|'failed'|'conflict'|'expired'|'recovered'|'cancelled';
 export type Action={id:string;account_id:string;kind:Kind;resource_name:string;before_value:string;after_value:string;source:'owner'|'stock';product_id:string|null;inventory_fingerprint:string|null;google_fingerprint:string|null;reason:string;state:ActionState;created_by:string|null;approved_by:string|null;created_at:string;expires_at:string;started_at:string|null;recovery_due_at:string|null;request_id:string|null;error_code:string|null;idempotency_key:string};
 export type Mapping={account_id:string;resource_name:string;campaign_id:string;product_id:string;fingerprint:string;active:boolean;evidence:{partPriceBani:number|null;quality:string|null;models:string[];partType:string|null}};
-export type ControlSettings={account_id:string;stock_enabled:boolean;global_paused:boolean;version:string;approved_by:string|null;approved_at:string|null;recovery_deployment_id?:string|null};
+export type ControlSettings={account_id:string;stock_enabled:boolean;global_paused:boolean;version:string;approved_by:string|null;approved_at:string|null;recovery_deployment_id?:string|null;protect_existing_ads?:boolean};
 export type Heartbeat={role:'monitor'|'recovery';deployment_id:string;version:string;checked_at:string;ok:boolean};
 export function validAccount(account:string){if(!/^\d{10}$/.test(account))throw new Error('Invalid account.');return account;}
 export function resourceFor(kind:Kind,account:string,resource:string){

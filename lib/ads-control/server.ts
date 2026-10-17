@@ -34,12 +34,13 @@ export async function readControl(){
  if(actions.error||mappings.error||events.error)throw safeError(controlStorageMessage);
  if((mappings.data?.length??0)>1000)throw safeError('Product mapping limit reached. Review the control scope.');
  const blockers=stockControlReady(settings,heartbeats,monitorDeployment(settings),stock.reliable);
+ if(settings.protect_existing_ads!==false)blockers.unshift('Existing ads, campaigns, keywords and budgets are protected. Search monitoring may prepare additional drafts only.');
  if(!mappings.data?.length)blockers.push('Link a live ad to its verified inventory product.');
  const {lock_token:unusedToken,lock_until:unusedUntil,...publicSettings}=settings as typeof settings&{lock_token?:string;lock_until?:string};void unusedToken;void unusedUntil;
  return {settings:publicSettings,heartbeats,blockers,checkMode:monitorDeployment(settings)==='dashboard'?'dashboard':'scheduled',recoveryReady:recoveryReady(heartbeats,settings.recovery_deployment_id??process.env.ADS_CONTROL_RECOVERY_DEPLOYMENT_ID),
   mode:settings.stock_enabled&&!settings.global_paused&&blockers.length===0?'STOCK_CONTROL':'ADVISE',actions:actions.data as Action[],mappings:mappings.data,events:events.data,
   products:stock.reliable?(stock.snapshot?.parts??[]).filter(p=>p.category==='PART'&&advertisingPartType(p.partType)).map(p=>({id:p.id,name:p.name,available:p.available,eligible:p.eligible,fingerprint:p.fingerprint})):[],
-  limitations:['Automatic control only pauses individually mapped ads for unavailable or materially changed stock. It never re-enables ads automatically.','Temporary campaign pauses recover after eight minutes, leaving a two-minute margin. Provider or infrastructure outages can still delay recovery.','New ad publication remains policy-blocked. Bid optimization, new campaigns, budget increases and targeting changes are outside this release.','Google reporting can lag. Daily allowances are monitoring safeguards, not a guaranteed billing cap.']};
+  limitations:['Existing ads, keywords, campaigns and budgets are protected. Search monitoring only prepares additional drafts and notifications.','Temporary campaign pauses recover after eight minutes, leaving a two-minute margin. Provider or infrastructure outages can still delay recovery.','New ad publication remains policy-blocked. Bid optimization, new campaigns, budget increases and targeting changes are outside this release.','Google reporting can lag. Daily allowances are monitoring safeguards, not a guaranteed billing cap.']};
 }
 export async function controlResources(){
  const accountId=agentAccount();
@@ -75,7 +76,9 @@ export async function unlinkProduct(resource:string){
 }
 export async function proposeAction(actor:string,input:{kind:Kind;resource:string;value:string;requestId:string}){
  if(!/^[a-f0-9-]{36}$/i.test(input.requestId))throw new Error('Invalid request identity.');
- const {db,account}=await setupControl(),actual=await controlGoogle().read(input.kind,input.resource);
+ const {db,account,store}=await setupControl();
+ if((await store.settings(account)).protect_existing_ads!==false)throw new IntegrationError('Existing ads and campaign settings are protected. Only new stock-matched drafts may be prepared.',409);
+ const actual=await controlGoogle().read(input.kind,input.resource);
  const stock=await collectStockMonitor(actor);
  const mapping=await db.from('ga_ads_product_ads').select('*').eq('account_id',account).eq('resource_name',input.resource).eq('active',true).maybeSingle();if(mapping.error)throw safeError(controlStorageMessage);
  const part=mapping.data&&stock.reliable?stock.snapshot?.parts.find(p=>p.id===mapping.data.product_id):null;
@@ -140,7 +143,7 @@ export async function runStockControlTick(interactive=false,registeredDeployment
  if(!deployment||deployment.length>100)throw safeError('Configure the stock worker deployment identity.');
  const stock=await collectStockMonitor();
  const r=await db.from('ga_ads_control_workers').upsert({account_id:account,role:'monitor',deployment_id:deployment,version:CONTROL_VERSION,checked_at:new Date().toISOString(),ok:stock.reliable});if(r.error)throw safeError(controlStorageMessage);
- const settings=await store.settings(account);if(settings.global_paused||!settings.stock_enabled||!stock.reliable)return {checked:true,changed:0,reliable:stock.reliable};
+ const settings=await store.settings(account);if(settings.protect_existing_ads!==false||settings.global_paused||!settings.stock_enabled||!stock.reliable)return {checked:true,changed:0,reliable:stock.reliable};
  const expired=await db.from('ga_ads_actions').update({state:'expired',error_code:'approval_expired',updated_at:new Date().toISOString()}).eq('account_id',account).in('state',['proposed','approved']).lte('expires_at',new Date().toISOString());if(expired.error)throw safeError(controlStorageMessage);
  const unresolved=await db.from('ga_ads_actions').select('id').eq('account_id',account).neq('kind','campaign_pause').in('state',['executing','uncertain']).order('created_at').limit(3);if(unresolved.error)throw safeError(controlStorageMessage);
  for(const a of unresolved.data??[])await serverControlEngine().reconcile(a.id);

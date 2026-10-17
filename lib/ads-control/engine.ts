@@ -28,6 +28,7 @@ export function createControlEngine(o:Options){
    let started=false,mutationAcknowledged=false;
    try{
     const settings=await o.store.settings(a.account_id);
+    if(settings.protect_existing_ads!==false)throw new Error('existing_ads_protected');
     if(settings.global_paused)throw new Error('automation_paused');
     if(a.source==='stock'&&(!settings.stock_enabled||!settings.approved_by))throw new Error('stock_control_disabled');
     if(a.kind==='campaign_pause'&&!await o.recoveryHealthy())throw new Error('independent_recovery_unavailable');
@@ -42,6 +43,7 @@ export function createControlEngine(o:Options){
     await o.preflight(a);
     if(!approvalValid(a,now()))throw new Error('approval_expired');
     const latest=await o.store.settings(a.account_id);
+    if(latest.protect_existing_ads!==false)throw new Error('existing_ads_protected');
     if(latest.global_paused||a.source==='stock'&&!latest.stock_enabled)throw new Error('automation_paused');
     const again=await o.google.read(a.kind,a.resource_name);
     if(again.value!==a.before_value)return o.store.transition(a,'conflict',{error_code:'google_state_changed'});
@@ -59,7 +61,7 @@ export function createControlEngine(o:Options){
    }catch(error){
     const uncertain=started&&(mutationAcknowledged||!(error instanceof ControlProviderError)||error.uncertain);
     // Provider text and response bodies never enter logs or browser responses.
-    const allowed=['automation_paused','stock_control_disabled','independent_recovery_unavailable','shared_budget_not_supported','google_policy_not_clear','google_ad_changed','approval_expired','inventory_changed','inventory_unavailable','mapping_missing','daily_allowance_unavailable','daily_allowance_reached','monitor_worker_unavailable'];
+    const allowed=['existing_ads_protected','automation_paused','stock_control_disabled','independent_recovery_unavailable','shared_budget_not_supported','google_policy_not_clear','google_ad_changed','approval_expired','inventory_changed','inventory_unavailable','mapping_missing','daily_allowance_unavailable','daily_allowance_reached','monitor_worker_unavailable'];
     const code=error instanceof ControlProviderError?error.code:error instanceof Error&&allowed.includes(error.message)?error.message:'preflight_or_storage_failed';
     return o.store.transition(a,uncertain?'uncertain':'failed',{error_code:code});
    }
