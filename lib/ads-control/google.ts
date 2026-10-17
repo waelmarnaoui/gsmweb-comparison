@@ -6,7 +6,7 @@ export function safeGoogleCodes(body:unknown){
  const codes=new Set<string>(),add=(v:unknown)=>{if(typeof v==='string'&&/^[A-Z][A-Z0-9_]{1,79}$/.test(v))codes.add(v);};
  add(data?.error?.status);
  for(const detail of Array.isArray(data?.error?.details)?data.error.details.slice(0,10):[])for(const error of Array.isArray(detail?.errors)?detail.errors.slice(0,10):[]){
-  for(const key of ['queryError','authenticationError','authorizationError','requestError','quotaError','internalError','fieldError'])add(error?.errorCode?.[key]);
+  for(const key of ['queryError','authenticationError','authorizationError','requestError','quotaError','internalError','fieldError','policyFindingError','policyValidationParameterError','adGroupAdError','adError','adGroupError','adGroupCriterionError','biddingError','stringLengthError'])add(error?.errorCode?.[key]);
  }
  return [...codes].slice(0,8);
 }

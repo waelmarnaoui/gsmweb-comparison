@@ -8,7 +8,7 @@ try{
   const r=await fetch(url+'/api/ai-ads/control',{method,headers:{Origin:url,'Content-Type':'application/json'},...(method==='POST'?{body:JSON.stringify({operation:'execute',id:'00000000-0000-0000-0000-000000000001'})}:{}),signal:AbortSignal.timeout(5000)});
   assert.equal(r.status,401,'unauthenticated control request rejected');
  }
- for(const method of ['GET','POST']){const r=await fetch(url+'/api/ai-ads/growth',{method,headers:{Origin:url},signal:AbortSignal.timeout(5000)});assert.equal(r.status,401);}
+ for(const path of ['/api/ai-ads/growth','/api/ai-ads/publishing','/api/optimizer/ai-settings'])for(const method of ['GET','POST']){const r=await fetch(url+path,{method,headers:{Origin:url},signal:AbortSignal.timeout(5000)});assert.equal(r.status,401);}
  const tick=await fetch(url+'/api/ai-ads/control/tick',{method:'POST',signal:AbortSignal.timeout(5000)});assert.equal(tick.status,401);
  const pair=await fetch(url+'/api/ai-ads/control/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({setupCode:'invalid',publicKey:'invalid'}),signal:AbortSignal.timeout(5000)});assert.equal(pair.status,400);
  console.log('PASS: production HTTP endpoints deny unauthenticated control and scheduler access; invalid pairing is rejected. Only local dummy configuration was used.');

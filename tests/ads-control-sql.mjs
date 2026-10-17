@@ -46,5 +46,18 @@ try{
  await db.query("insert into ga_ads_growth_notifications(notification_key,account_id,opportunity_id,kind,details) values($1,$2,'opportunity','new_draft_prepared','{}')",['f'.repeat(64),account]);
  await assert.rejects(db.query('delete from ga_ads_growth_notifications'),/permission denied/);
  await assert.rejects(db.query("update ga_ads_growth_notifications set details='{}'"),/permission denied/);
+ await db.exec('reset role');await db.exec(await readFile(new URL('../supabase/AUTO-PUBLISH-PROPOSED.sql',import.meta.url),'utf8'));
+ await db.exec('set role service_role');assert.equal((await db.query('select auto_publish_enabled from ga_ads_control')).rows[0].auto_publish_enabled,false);
+ await assert.rejects(db.query('update ga_ads_control set auto_publish_enabled=true'),/check constraint/);
+ const pubid='1'.repeat(64),plan={key:pubid,account,campaignId:'1',groupName:'GSMWEB-AI-test',model:'Recorded',partType:'battery',productId:'p',stock:{},draft:{},keywords:[],copyRulesVersion:'test'};
+ await db.query('insert into ga_ads_publications(id,account_id,plan) values($1,$2,$3)',[pubid,account,JSON.stringify(plan)]);
+ await assert.rejects(db.query('insert into ga_ads_publications(id,account_id,plan) values($1,$2,$3)',[pubid,account,JSON.stringify(plan)]),/unique/);
+ await assert.rejects(db.query("update ga_ads_publications set plan=jsonb_set(plan,'{model}','\"Different\"') where id=$1",[pubid]),/immutable/);
+ await db.query("update ga_ads_publications set state='creating',pending_operation='create',version=1 where id=$1 and version=0",[pubid]);assert.equal((await db.query('select count(*)::int as n from ga_ads_publication_events')).rows[0].n,2);
+ await assert.rejects(db.query('delete from ga_ads_publication_events'),/permission denied/);
+ for(const role of ['anon','authenticated']){await db.exec('reset role;set role '+role);for(const table of ['ga_ads_publications','ga_ads_publication_events'])await assert.rejects(db.query('select * from '+table),/permission denied/);await assert.rejects(db.query('update ga_ads_control set auto_publish_enabled=true'),/permission denied/);}
+ await db.exec('reset role');await db.exec(await readFile(new URL('../supabase/CONNECTIONS-PROPOSED.sql',import.meta.url),'utf8'));await db.exec(await readFile(new URL('../supabase/AI-ADVISOR-CONNECTION-PROPOSED.sql',import.meta.url),'utf8'));
+ await db.exec('set role service_role');await db.query("insert into ga_connections(id,encrypted_credentials,metadata,connected_by) values('ai_advisor','TEST_CIPHERTEXT','{\"provider\":\"anthropic\"}',$1)",[actor]);
+ for(const role of ['anon','authenticated']){await db.exec('reset role;set role '+role);await assert.rejects(db.query('select encrypted_credentials from ga_connections'),/permission denied/);}
  console.log('PASS: control SQL executed in local PostgreSQL; default pause, exclusive fenced leases, idempotency, exact approval constraints, duplicate live intent blocked, budget increases rejected, append-only audit, RLS and browser-role access denial. No production data changed.');
 }finally{await db.close();}

@@ -1,3 +1,4 @@
+import {runPublishingTick} from '@/lib/ai-ads/publishing-server';
 import {collectGrowthMonitor} from '@/lib/ai-ads/growth-server';
 import {requireAdmin,apiError} from '@/lib/server';
 import {sameOrigin} from '@/lib/connections';
@@ -8,7 +9,7 @@ import {cancelAction} from '@/lib/ads-control/server';
 import {ControlProviderError} from '@/lib/ads-control/google';
 import {resourceReadError} from '@/lib/ads-control/resource-loader';
 const controlError=(error:unknown)=>error instanceof ControlProviderError?Response.json({error:resourceReadError(error)},{status:503}):apiError(error);
-export const maxDuration=120;
+export const maxDuration=300;
 export async function GET(request:Request){try{
  await requireAdmin();
  return Response.json(new URL(request.url).searchParams.get('resources')==='1'?await controlResources():await readControl(),{headers:{'Cache-Control':'no-store'}});
@@ -22,7 +23,7 @@ export async function POST(request:Request){try{
  switch(input.operation){
   case 'pair':return Response.json(await createLaptopPairing(user.id,text('canary',20)),{headers:{'Cache-Control':'no-store'}});
   case 'tick':{
-   try{const reporting=await refreshAdsObservation();const result=await runStockControlTick(true);const growth=await collectGrowthMonitor();return Response.json({...result,searchMonitoringAvailable:growth.reliable,reportingAvailable:!reporting.refreshError});}
+   try{const reporting=await refreshAdsObservation();const result=await runStockControlTick(true);const growth=await collectGrowthMonitor();await runPublishingTick();return Response.json({...result,searchMonitoringAvailable:growth.reliable,reportingAvailable:!reporting.refreshError});}
    catch(error){try{await markControlWorkerFailed(true);}catch{}throw error;}
   }
   case 'settings':

@@ -6,7 +6,7 @@ import {service} from './server';
 import {IntegrationError} from './integration-error';
 import {encryptConnection,decryptConnection} from './connection-crypto';
 import {validateOAuthState,validateAppRequestOrigin} from './connection-validation';
-export type ConnectionId='google'|'google_ads'|'google_ads_management'|'supabase_calls'|'supabase_crm';
+export type ConnectionId='google'|'google_ads'|'google_ads_management'|'supabase_calls'|'supabase_crm'|'ai_advisor';
 export type Credentials={access_token:string;refresh_token:string;expires_at:number;project_key?:string};
 export type Connection={id:ConnectionId;credentials:Credentials;metadata:Record<string,string>;connected_by:string;sealed:string};
 export function appOrigin(){const value=process.env.APP_URL;if(!value)throw new IntegrationError('APP_URL is not configured.',503);const url=new URL(value);if(url.protocol!=='https:'&&url.hostname!=='localhost'&&url.hostname!=='127.0.0.1')throw new IntegrationError('APP_URL must use HTTPS.',503);return url.origin;}

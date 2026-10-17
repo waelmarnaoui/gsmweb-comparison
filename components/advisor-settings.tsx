@@ -1,0 +1,14 @@
+'use client';
+import {useCallback,useEffect,useState} from 'react';
+type Status={configured:boolean;model:string;source:string;notice:string;tested?:boolean;testedModel?:string};
+export default function AdvisorSettings({onConfigured}:{onConfigured:()=>void}){
+ const [status,setStatus]=useState<Status|null>(null),[apiKey,setApiKey]=useState(''),[model,setModel]=useState('claude-sonnet-5'),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
+ const refresh=useCallback(async()=>{try{const r=await fetch('/api/optimizer/ai-settings',{cache:'no-store'});if(!r.ok)return;const d=await r.json();setStatus(d);setModel(d.model);}catch{/* The connection form remains available. */}},[]);
+ useEffect(()=>{void refresh();},[refresh]);
+ async function run(operation:'test'|'save'){
+  setBusy(true);setNotice('');const key=apiKey;setApiKey('');
+  try{const r=await fetch('/api/optimizer/ai-settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({operation,model,...(key?{apiKey:key}:{})})});const d=await r.json();if(!r.ok)throw new Error(d.error||'The AI connection could not be verified.');setStatus(d);setNotice(operation==='save'?'AI connection tested and saved securely. Chat and automatic report analysis are ready.':'Real AI connection test passed.');onConfigured();}
+  catch(e){setNotice(e instanceof Error?e.message:'The AI connection could not be verified.');}finally{setBusy(false);}
+ }
+ return <details className="agent-review" open={status?.configured===false}><summary>Claude connection settings</summary><p>{status?.notice||'Check the real AI connection or connect an Anthropic API project.'}</p><p>The API key is encrypted on the server and is never returned by this screen. A connection test makes a small real API request using static test text; no customer or account data is sent for that test. Claude API usage requires an Anthropic API project with billing.</p><label>Anthropic API key <input type="password" autoComplete="off" spellCheck={false} value={apiKey} onChange={e=>setApiKey(e.target.value)} maxLength={507} placeholder={status?.configured?'Leave blank to use the saved server key':'Enter your Anthropic API key here, not in chat'}/></label><label>Advisor model <input value={model} onChange={e=>setModel(e.target.value)} maxLength={120} autoComplete="off" spellCheck={false}/></label><div className="agent-actions"><button type="button" disabled={busy||!model} onClick={()=>void run('test')}>{busy?'Testing…':'Test real AI connection'}</button><button type="button" disabled={busy||!model||!apiKey&&!status?.configured} onClick={()=>void run('save')}>Test and save securely</button></div>{notice&&<p role="status">{notice}</p>}<p><a href="https://platform.claude.com/settings/keys" target="_blank" rel="noreferrer">Anthropic API keys</a></p></details>;
+}

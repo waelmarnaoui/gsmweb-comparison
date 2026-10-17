@@ -20,7 +20,7 @@ export async function readGrowthMonitor(){
  if(latest.error||good.error||notifications.error)throw storage();
  const report=good.data?.report??null,stamp=Date.parse(report?.search?.fetchedAt??'');
  const reliable=latest.data?.status==='complete'&&Number.isFinite(stamp)&&stamp<=Date.now()+60000&&Date.now()-stamp<900000;
- return {report,reliable,lastAttemptFailed:latest.data?.status==='failed',error:latest.data?.error_code??null,notifications:notifications.data??[],protectExistingAds:true,publicationEnabled:false};
+ return {report,reliable,lastAttemptFailed:latest.data?.status==='failed',error:latest.data?.error_code??null,notifications:notifications.data??[],protectExistingAds:true,publicationSettingsRoute:'/api/ai-ads/publishing'};
 }
 let active:Promise<Awaited<ReturnType<typeof readGrowthMonitor>>>|null=null,retryAfter=0;
 export async function collectGrowthMonitor(){
@@ -37,11 +37,11 @@ export async function collectGrowthMonitor(){
   }catch(error){
    retryAfter=Date.now()+60000;const saved=await db.from('ga_ads_search_runs').upsert({account_id:account,slot,status:'failed',report:null,error_code:resourceReadError(error)},{onConflict:'account_id,slot,status',ignoreDuplicates:true});if(saved.error)throw storage();return readGrowthMonitor();
   }
-  const report={copyRulesVersion:COPY_RULES_VERSION,search,opportunities,activeCampaigns:search.campaigns.filter(c=>campaignOpen(c,search.timeZone)).map(c=>c.id),publicationBlockedReason:'New consumer phone repair ads require policy clearance. No existing ad, keyword, budget or campaign was changed.'};
+  const report={copyRulesVersion:COPY_RULES_VERSION,search,opportunities,activeCampaigns:search.campaigns.filter(c=>campaignOpen(c,search.timeZone)).map(c=>c.id),publicationBlockedReason:'Restricted-service risk requires Google review of the exact truthful offer. New groups remain paused until the exact ad is cleared. Existing ads, keywords, budgets and campaigns are protected.'};
   if(Buffer.byteLength(JSON.stringify(report))>4000000)throw new IntegrationError('Search monitoring report exceeds its safe storage limit.',503);
   for(const o of opportunities){
    const key=digest({account,id:o.id,headlines:o.draft.headlines,descriptions:o.draft.descriptions,pinnedHeadlines:o.draft.pinnedHeadlines,pinnedDescriptions:o.draft.pinnedDescriptions,keywords:o.draft.keywords});
-   const notification=await db.from('ga_ads_growth_notifications').upsert({notification_key:key,account_id:account,opportunity_id:o.id,kind:'new_draft_prepared',details:{model:o.model,partType:o.partType,productId:o.productId,campaignId:o.campaignId,observedTerms:o.observedTerms.slice(0,3),message:`New ${o.model} ${o.partType} draft prepared from reported search terms and verified stock. Policy-blocked; not published.`}},{onConflict:'notification_key',ignoreDuplicates:true});if(notification.error)throw storage();
+   const notification=await db.from('ga_ads_growth_notifications').upsert({notification_key:key,account_id:account,opportunity_id:o.id,kind:'new_draft_prepared',details:{model:o.model,partType:o.partType,productId:o.productId,campaignId:o.campaignId,observedTerms:o.observedTerms.slice(0,3),message:`New ${o.model} ${o.partType} draft prepared from reported search terms and verified stock. Prepared with an installation disclosure. Check automatic publication history for the actual Google submission and review state.`}},{onConflict:'notification_key',ignoreDuplicates:true});if(notification.error)throw storage();
   }
   const saved=await db.from('ga_ads_search_runs').upsert({account_id:account,slot,status:'complete',report,error_code:null},{onConflict:'account_id,slot,status',ignoreDuplicates:true});if(saved.error)throw storage();
   retryAfter=0;return readGrowthMonitor();
