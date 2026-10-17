@@ -1,5 +1,6 @@
 import './globals.css';
 import './mobile.css';
+import './brand.css';
 import type {Viewport} from 'next';
 export const viewport:Viewport={width:'device-width',initialScale:1,viewportFit:'cover',interactiveWidget:'resizes-content'};
 export const metadata = { title: 'GSMWeb | Attribution', description: 'Call attribution and recorded revenue review' };

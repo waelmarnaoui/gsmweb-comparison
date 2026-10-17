@@ -1,0 +1,4 @@
+.gsmweb-logo{display:block;width:174px;max-width:100%;height:auto;object-fit:contain;flex-shrink:0}
+.brand small{padding-left:0;letter-spacing:0}.workspace-brand .gsmweb-logo{width:184px}.workspace-mobile .gsmweb-logo{width:124px}.conversion-nav .gsmweb-logo{width:124px}
+.login-brand{display:flex;flex-direction:column;align-items:center;gap:16px}.login-brand .gsmweb-logo{width:232px}.login-brand span{font-size:16px;font-weight:400}
+.login-legal{display:flex;flex-direction:row;flex-wrap:wrap;justify-content:center;gap:18px;margin-top:24px}.login-legal a{color:#543766;font-size:13px}
