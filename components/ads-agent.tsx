@@ -38,11 +38,18 @@ export default function AdsAgent(){
   finally{refreshing.current=false;}
  },[]);
  useEffect(()=>{void refresh();},[refresh]);
+ const waitingForReply=history.some(exchange=>exchange.state==='pending');
+ useEffect(()=>{
+  if(!waitingForReply)return;
+  let cancelled=false,timer:ReturnType<typeof setTimeout>;
+  const poll=async()=>{try{if(!document.hidden&&!inFlight.current){const chats=await api('chat');if(!cancelled&&!inFlight.current)setHistory(chats.exchanges);}}catch{if(!cancelled)setNotice('The reply is still pending. Check your computer and gateway; your message will not be resent.');}finally{if(!cancelled)timer=setTimeout(poll,10000);}};
+  timer=setTimeout(poll,10000);return()=>{cancelled=true;clearTimeout(timer);};
+ },[waitingForReply]);
  async function send(text:string,attachments:ChatAttachment[]=[],reviewOnly=false):Promise<string|null>{
-  if(inFlight.current||!text.trim())return null;
+  if(inFlight.current||waitingForReply||!text.trim())return null;
   inFlight.current=true;setBusy(true);setNotice('');const id=crypto.randomUUID();
   setHistory(previous=>[...previous,{id,user_message:text+(attachments.length?'\n[Attached: '+attachments.map(file=>file.name).join(', ')+']':''),assistant_reply:null,state:'pending',observation_at:null}]);
-  try{const result=await api('chat','POST',{id,message:text,attachments,readOnly:readOnly||reviewOnly});setHistory(previous=>previous.map(exchange=>exchange.id===id?{...exchange,assistant_reply:result.reply,state:'completed'}:exchange));void refresh();return result.reply.reply;}
+  try{const result=await api('chat','POST',{id,message:text,attachments,readOnly:readOnly||reviewOnly});setHistory(previous=>previous.map(exchange=>exchange.id===id?{...exchange,assistant_reply:result.reply,state:result.pending?'pending':'completed'}:exchange));if(result.pending)setNotice('Ollama is working on your computer. Up to 30 minutes are allowed; the reply will appear here automatically.');else void refresh();return result.reply.reply;}
   catch(error){setHistory(previous=>previous.map(exchange=>exchange.id===id?{...exchange,state:'failed'}:exchange));setNotice(error instanceof Error?error.message:'Chat failed.');try{const chats=await api('chat');setHistory(chats.exchanges);}catch{/* Keep the visible failure if history is unavailable. */}return null;}
   finally{inFlight.current=false;setBusy(false);}
  }
@@ -73,7 +80,7 @@ export default function AdsAgent(){
  <div ref={chatEnd}/></div>
  <div className="agent-quick-prompts"><button disabled={busy||voiceActive||!context?.aiConfigured} onClick={()=>void send(analysisRequest)}>Analyze performance</button><button disabled={busy||voiceActive||!context?.aiConfigured} onClick={()=>void send('Check the actual status and policy review of our created ads. Do not change the account.')}>Check my ads</button><button disabled={busy||voiceActive||!context?.aiConfigured} onClick={()=>void send('Prepare a factual ad draft from current verified stock. Do not publish or change settings.')}>Prepare an ad draft</button></div>
  <fieldset disabled={busy||voiceActive} className="agent-chat-tools" aria-label="Chat control mode"><legend>Chat mode</legend><label><input type="radio" name="chat-mode" checked={readOnly} onChange={()=>setReadOnly(true)}/> Read Only</label><label><input type="radio" name="chat-mode" checked={!readOnly} onChange={()=>{if(window.confirm('Allow supported account actions requested in chat? Existing permissions, spending limits, policy checks and web-only restrictions still apply. Ollama currently remains read-only in both modes.'))setReadOnly(false);}}/> Full Control</label></fieldset>
- <AgentComposer busy={busy} enabled={!!context?.aiConfigured} onSend={send} onVoiceChange={setVoiceActive}/>
+ <AgentComposer busy={busy||waitingForReply} enabled={!!context?.aiConfigured} onSend={send} onVoiceChange={setVoiceActive}/>
  {!context?.aiConfigured&&<p className="agent-small">{context?.aiStatus?.notice||'AI connection required.'} <a href="/optimizer/settings">Open settings</a></p>}
  <details className="agent-page-tools"><summary>Daily check-in & account controls</summary>
  <div className="agent-goals"><div><small>Daily customer payment target</small><strong>4,000 RON</strong></div><div><small>Allowed ad spend today</small><strong>{context?.allowance.allowanceBani===null||!context?'Unconfirmed':`${(context.allowance.allowanceBani/100).toFixed(2)} RON`}</strong></div><div><small>Confirmed payments today</small><strong>{context?.today?`${(context.today.amountBani/100).toFixed(2)} RON`:'Awaiting check-in'}</strong></div></div>
