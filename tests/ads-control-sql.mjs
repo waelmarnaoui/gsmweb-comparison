@@ -68,5 +68,18 @@ try{
  await db.exec('reset role');await db.exec(await readFile(new URL('../supabase/CONNECTIONS-PROPOSED.sql',import.meta.url),'utf8'));await db.exec(await readFile(new URL('../supabase/AI-ADVISOR-CONNECTION-PROPOSED.sql',import.meta.url),'utf8'));
  await db.exec('set role service_role');await db.query("insert into ga_connections(id,encrypted_credentials,metadata,connected_by) values('ai_advisor','TEST_CIPHERTEXT','{\"provider\":\"anthropic\"}',$1)",[actor]);
  for(const role of ['anon','authenticated']){await db.exec('reset role;set role '+role);await assert.rejects(db.query('select encrypted_credentials from ga_connections'),/permission denied/);}
+ await db.exec('reset role');await db.exec(await readFile(new URL('../supabase/ADS-AGENT-PROPOSED.sql',import.meta.url),'utf8'));await db.exec(await readFile(new URL('../supabase/AGENT-TOOLS-PROPOSED.sql',import.meta.url),'utf8'));
+ await db.exec('set role service_role');assert.equal((await db.query('select agent_chat_enabled from ga_ads_control')).rows[0].agent_chat_enabled,false);
+ await assert.rejects(db.query('update ga_ads_control set agent_chat_enabled=true'),/check constraint/);
+ const exchange='00000000-0000-4000-8000-000000000020',job='00000000-0000-4000-8000-000000000021';
+ await db.query("insert into ga_agent_exchanges(id,account_id,actor,user_message) values($1,$2,$3,'unit test')",[exchange,account,actor]);
+ await db.query("insert into ga_agent_tool_runs(id,exchange_id,account_id,actor,external_id,tool,input) values($1,$2,$3,$4,'tool1','run_control_cycle','{}')",[job,exchange,account,actor]);
+ await assert.rejects(db.query("insert into ga_agent_tool_runs(id,exchange_id,account_id,actor,external_id,tool,input) values(gen_random_uuid(),$1,$2,$3,'tool1','run_control_cycle','{}')",[exchange,account,actor]),/unique/);
+ await db.query("insert into ga_agent_jobs(id,account_id,actor,kind,payload) values($1,$2,$3,'control_cycle','{}')",[job,account,actor]);
+ await assert.rejects(db.query("update ga_agent_jobs set payload='{\"changed\":true}'"),/permission denied/);
+ await db.query("update ga_agent_jobs set state='completed',result='{\"confirmed\":true}' where id=$1",[job]);
+ assert.equal((await db.query('select count(*)::int as n from ga_agent_job_events')).rows[0].n,2);
+ await assert.rejects(db.query('delete from ga_agent_job_events'),/permission denied/);
+ for(const role of ['anon','authenticated']){await db.exec('reset role;set role '+role);for(const table of ['ga_agent_jobs','ga_agent_tool_runs','ga_agent_preferences','ga_agent_job_events','ga_agent_runtime_checks'])await assert.rejects(db.query('select * from '+table),/permission denied/);}
  console.log('PASS: control SQL executed in local PostgreSQL; default pause, exclusive fenced leases, idempotency, exact approval constraints, duplicate live intent blocked, budget increases rejected, append-only audit, RLS and browser-role access denial. No production data changed.');
 }finally{await db.close();}

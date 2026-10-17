@@ -1,7 +1,12 @@
 import {requireAdmin,service,apiError} from '@/lib/server';
 import {sameOrigin} from '@/lib/connections';
 import {readAgentContext,agentAccount} from '@/lib/agent-context';
-import {askAdvisor,type AdvisoryReply} from '@/lib/agent-model';
+import {type AdvisoryReply} from '@/lib/agent-model';
+import {runActionAgent} from '@/lib/action-agent-model';
+import {advisorFailure} from '@/lib/advisor-settings';
+import {sourceContent} from '@/lib/agent-source-policy';
+import {actionTools} from '@/lib/agent-actions';
+export const maxDuration=300;
 import {IntegrationError} from '@/lib/integration-error';
 import {readStockMonitor} from '@/lib/ai-ads/monitor-server';
 import {advisorConfiguration} from '@/lib/advisor-settings-server';
@@ -17,6 +22,7 @@ export async function POST(request:Request){try{
  const {user}=await requireAdmin();sameOrigin(request);
  const body=await request.json();
  if(typeof body.message!=='string'||!body.message.trim()||body.message.length>4000||typeof body.id!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(body.id))throw new Error('Invalid chat request.');
+ try{sourceContent(body.message);}catch{throw new IntegrationError('Keep credentials out of chat. Use the secure connection form.',400);}
  const {key,model}=await advisorConfiguration();
  if(!key||!model)throw new IntegrationError('Add your Anthropic API key in AI settings on this dashboard to enable chat.',503);
  const context=await readAgentContext(),db=service();
@@ -33,10 +39,11 @@ export async function POST(request:Request){try{
   try{stock=stockAdvisorEvidence(await readStockMonitor());}catch{/* Missing stock setup must remain unknown without disabling account chat. */}
   let automaticPublication:unknown={available:false};
   try{const p=await readPublishing();automaticPublication={available:true,correctionsEnabled:p.correctionsEnabled,correctionScope:'One factual editorial replacement of agent-created disapproved ads; eligible, limited and business-policy cases unchanged.',enabled:p.enabled,globallyPaused:p.globallyPaused,lastCheckedAt:p.lastCheckedAt,error:p.error,publications:p.publications.slice(0,20).map(r=>({model:r.model,partType:r.partType,state:r.state,error:r.error,google:r.google?{groupStatus:r.google.groupStatus,adStatus:r.google.adStatus,approval:r.google.approval,review:r.google.review,topics:r.google.topics}:null,checkedAt:r.checkedAt})),limitations:p.limitations};}catch{/* Missing publishing setup is unknown, never fabricated success. */}
-  const modelContext={...context,stock,automaticPublication,accountId:undefined,observation:redact(observation),ronObservation:redact(context.ronObservation)};
-  const reply=await askAdvisor({key,model,controlMode:context.control.mode,message:body.message.trim(),context:modelContext,history:(history??[]).reverse().flatMap(row=>[{role:'user' as const,content:row.user_message},{role:'assistant' as const,content:JSON.stringify(row.assistant_reply as AdvisoryReply)}])});
+  const preferences=await db.from('ga_agent_preferences').select('name,value,updated_at').eq('account_id',context.accountId).order('name').limit(30);
+  const modelContext={...context,businessPreferences:preferences.error?{available:false}:preferences.data,stock,automaticPublication,accountId:undefined,observation:redact(observation),ronObservation:redact(context.ronObservation)};
+  const reply=await runActionAgent({key,model,tools:actionTools({exchangeId:body.id,account:context.accountId,actor:user.id,userMessage:body.message.trim(),readOnly:body.message.trim()==='Analyze the latest account report. Explain what you observed, the highest priority improvement, expected impact, risks and missing information. Do not change the account.'}),message:body.message.trim(),context:modelContext,history:(history??[]).reverse().flatMap(row=>[{role:'user' as const,content:(()=>{try{return sourceContent(row.user_message);}catch{return '[Credential-like message excluded.]';}})()},{role:'assistant' as const,content:JSON.stringify(row.assistant_reply as AdvisoryReply)}])});
   const saved=await db.from('ga_agent_exchanges').update({assistant_reply:reply,state:'completed'}).eq('id',body.id).eq('actor',user.id).eq('state','pending').select('id');
   if(saved.error||saved.data?.length!==1)throw new Error('Could not save the AI reply.');
   return Response.json({id:body.id,reply},{headers:{'Cache-Control':'no-store'}});
- }catch(error){await db.from('ga_agent_exchanges').update({state:'failed'}).eq('id',body.id).eq('actor',user.id).eq('state','pending');throw error;}
+ }catch(error){await db.from('ga_agent_exchanges').update({state:'failed'}).eq('id',body.id).eq('actor',user.id).eq('state','pending');throw new IntegrationError(typeof (error as any)?.statusCode==='number'?advisorFailure((error as any).statusCode,null):'The chat could not finish. Check Agent access for recorded actions or queued jobs before retrying.',503);}
  }catch(error){return apiError(error instanceof Error&&error.name==='AdvisorProviderError'?new IntegrationError(error.message,503):error);}}
