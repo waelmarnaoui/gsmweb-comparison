@@ -1,4 +1,5 @@
 import 'server-only';
+import {correctionAllowed,makeEditorialCorrection,correctionParentMatches} from './corrections';
 import {service} from '../server';
 import {agentAccount,readAgentContext} from '../agent-context';
 import {connectionToken} from '../connections';
@@ -15,16 +16,19 @@ const storage=()=>new IntegrationError('Automatic publishing storage is unavaila
 export async function readPublishing(){
  const db=service(),account=agentAccount();
  const [config,rows,events]=await Promise.all([
-  db.from('ga_ads_control').select('auto_publish_enabled,auto_publish_authorization,auto_publish_checked_at,auto_publish_error,global_paused').eq('account_id',account).single(),
+  db.from('ga_ads_control').select('auto_publish_enabled,auto_publish_authorization,auto_publish_checked_at,auto_publish_error,global_paused,auto_correction_enabled,auto_correction_authorization').eq('account_id',account).single(),
   db.from('ga_ads_publications').select('id,state,error_code,group_resource,ad_resource,google_feedback,checked_at,created_at,plan').eq('account_id',account).order('created_at',{ascending:false}).limit(100),
   db.from('ga_ads_publication_events').select('id,publication_id,event,details,created_at').eq('account_id',account).order('id',{ascending:false}).limit(50)
  ]);if(config.error||rows.error||events.error)throw storage();
- return {enabled:config.data.auto_publish_enabled,globallyPaused:config.data.global_paused,authorized:!!config.data.auto_publish_authorization,lastCheckedAt:config.data.auto_publish_checked_at,error:config.data.auto_publish_error,
-  publications:(rows.data??[]).map(r=>({id:r.id,state:r.state,error:r.error_code,groupResource:r.group_resource,adResource:r.ad_resource,google:r.google_feedback,checkedAt:r.checked_at,createdAt:r.created_at,model:r.plan.model,partType:r.plan.partType,groupName:r.plan.groupName})),events:events.data??[],limitations:['Ads are created Enabled inside new paused model-specific groups. Groups open automatically only after the exact ad is approved without policy restrictions.','Only newly created agent-owned groups can be enabled or paused. Existing ads, groups, campaign settings and budgets are protected.','Google reporting can lag; the allowance is not a guaranteed billing cap. Existing ads may continue spending.','The paired laptop must remain powered, online and running its worker.']};
+ return {correctionsEnabled:config.data.auto_correction_enabled,correctionsAuthorized:!!config.data.auto_correction_authorization,enabled:config.data.auto_publish_enabled,globallyPaused:config.data.global_paused,authorized:!!config.data.auto_publish_authorization,lastCheckedAt:config.data.auto_publish_checked_at,error:config.data.auto_publish_error,
+  publications:(rows.data??[]).map(r=>({id:r.id,state:r.state,error:r.error_code,groupResource:r.group_resource,adResource:r.ad_resource,google:r.google_feedback,checkedAt:r.checked_at,createdAt:r.created_at,model:r.plan.model,partType:r.plan.partType,groupName:r.plan.groupName,correctionOf:r.plan.correction?.parentId??null})),events:events.data??[],limitations:['Ads are created Enabled inside new paused model-specific groups. Groups open automatically only after the exact ad is approved without policy restrictions.','Only newly created agent-owned groups can be enabled or paused. Existing ads, groups, campaign settings and budgets are protected.','Google reporting can lag; the allowance is not a guaranteed billing cap. Existing ads may continue spending.','The paired laptop must remain powered, online and running its worker.']};
 }
 export async function setPublishing(actor:string,enabled:boolean){
  const db=service(),account=agentAccount();const r=await db.from('ga_ads_control').update({auto_publish_enabled:enabled,...(enabled?{auto_publish_authorization:`Dashboard approval by ${actor}: truthful installation-only stock/search ads; Enabled ads held in paused new groups pending Google review.`,global_paused:false}:{})}).eq('account_id',account);if(r.error)throw storage();
  const audit=await db.from('ga_audit').insert({actor,action:enabled?'enabled':'disabled',entity:'automatic_stock_search_publication',record_id:account,details:{enabled,scope:'new_agent_owned_model_groups',initialAdStatus:'ENABLED',initialGroupStatus:'PAUSED'}});if(audit.error)throw storage();
+}
+export async function setCorrections(actor:string,enabled:boolean){
+ const r=await service().from('ga_ads_control').update({auto_correction_enabled:enabled,...(enabled?{auto_correction_authorization:`Dashboard approval by ${actor}: one factual editorial correction of agent-created disapproved ads only; originals, eligible and limited ads protected.`}:{})}).eq('account_id',agentAccount());if(r.error)throw storage();
 }
 let active:Promise<{checked:boolean;busy?:boolean}>|null=null;
 export async function runPublishingTick(){
@@ -35,6 +39,13 @@ export async function runPublishingTick(){
   async function authorized(){const r=await db.from('ga_ads_control').select('auto_publish_enabled,auto_publish_authorization,global_paused').eq('account_id',account).single();if(r.error)throw storage();return r.data.auto_publish_enabled===true&&!!r.data.auto_publish_authorization&&!r.data.global_paused;}
   async function guard(plan:PublicationPlan,activation:boolean){
    if(plan.copyRulesVersion!==COPY_RULES_VERSION)return 'draft_copy_rules_changed';
+   if(plan.correction){
+    if(!activation){const c=await db.from('ga_ads_control').select('auto_correction_enabled,auto_correction_authorization').eq('account_id',account).single();if(c.error||!c.data.auto_correction_enabled||!c.data.auto_correction_authorization)return 'automatic_corrections_disabled';}
+    const p=await db.from('ga_ads_publications').select('*').eq('id',plan.correction.parentId).eq('account_id',account).single();
+    if(p.error||!p.data||p.data.plan.correction||!p.data.group_resource||!p.data.ad_resource||p.data.pending_operation||!['submitted','paused'].includes(p.data.state)||p.data.error_code==='owner_paused_group')return 'correction_parent_unverified';
+    const f=await google.inspect(p.data.plan);if(!correctionParentMatches(plan,p.data,f))return 'correction_feedback_changed';
+   }else if(activation){const child=await db.from('ga_ads_publications').select('id').eq('account_id',account).contains('plan',{correction:{parentId:plan.key}}).limit(1);if(child.error)throw storage();if(child.data?.length)return 'replaced_by_editorial_correction';}
+
    const growth=await readGrowthMonitor();if(!growth.reliable||growth.report?.copyRulesVersion!==COPY_RULES_VERSION)return 'search_monitoring_stale';
    const report=growth.report.search,campaign=report.campaigns.find((c:{id:string})=>c.id===plan.campaignId);if(!campaign||!campaignOpen(campaign,report.timeZone))return 'outside_campaign_schedule';
    try{await google.campaign(plan.campaignId);const inventory=await readRepairInventory();if(!inventory.complete)return 'stock_unverified';const problem=publicationStockProblem(plan,inventory.parts.find(p=>p.id===plan.productId)??null);if(problem)return problem;}catch{return 'stock_or_campaign_unverified';}
@@ -45,7 +56,22 @@ export async function runPublishingTick(){
    // Monitoring continues even when new publication is disabled. Only authorized
    // agent-owned resources can ever be changed; ambiguous creation is never retried.
    const current=await db.from('ga_ads_publications').select('*').eq('account_id',account).neq('state','prepared').neq('state','failed').order('checked_at',{ascending:true,nullsFirst:true}).limit(1);if(current.error)throw storage();
-   for(const row of current.data??[])await engine.monitor(row as PublicationRow);
+   for(const row of current.data??[]){
+    const monitored=await engine.monitor(row as PublicationRow);
+    if(await authorized()&&!monitored.plan.correction&&!monitored.pending_operation&&['submitted','paused'].includes(monitored.state)&&monitored.error_code!=='owner_paused_group'){
+     const c=await db.from('ga_ads_control').select('auto_correction_enabled,auto_correction_authorization').eq('account_id',account).single();if(c.error)throw storage();
+     if(c.data.auto_correction_enabled&&c.data.auto_correction_authorization){
+      const existing=await db.from('ga_ads_publications').select('id').eq('account_id',account).contains('plan',{correction:{parentId:monitored.id}}).limit(1);if(existing.error)throw storage();
+      if(!existing.data?.length){const f=await google.inspect(monitored.plan);
+       if(f&&f.groupResource===monitored.group_resource&&f.adResource===monitored.ad_resource&&correctionAllowed(f)){
+        const inventory=await readRepairInventory(),part=inventory.parts.find(p=>p.id===monitored.plan.productId);
+        const plan=inventory.complete&&part?makeEditorialCorrection(monitored.plan,f,part):null;
+        if(plan){const saved=await db.from('ga_ads_publications').upsert({id:plan.key,account_id:account,plan},{onConflict:'id',ignoreDuplicates:true});if(saved.error)throw storage();}
+       }
+      }
+     }
+    }
+   }
    if(await authorized()){
     const growth=await readGrowthMonitor();
     if(growth.reliable&&growth.report?.copyRulesVersion===COPY_RULES_VERSION){

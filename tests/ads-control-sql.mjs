@@ -56,6 +56,15 @@ try{
  await db.query("update ga_ads_publications set state='creating',pending_operation='create',version=1 where id=$1 and version=0",[pubid]);assert.equal((await db.query('select count(*)::int as n from ga_ads_publication_events')).rows[0].n,2);
  await assert.rejects(db.query('delete from ga_ads_publication_events'),/permission denied/);
  for(const role of ['anon','authenticated']){await db.exec('reset role;set role '+role);for(const table of ['ga_ads_publications','ga_ads_publication_events'])await assert.rejects(db.query('select * from '+table),/permission denied/);await assert.rejects(db.query('update ga_ads_control set auto_publish_enabled=true'),/permission denied/);}
+ await db.exec('reset role');await db.exec(await readFile(new URL('../supabase/AUTO-CORRECTIONS-PROPOSED.sql',import.meta.url),'utf8'));
+ await db.exec('set role service_role');assert.equal((await db.query('select auto_correction_enabled from ga_ads_control')).rows[0].auto_correction_enabled,false);
+ await assert.rejects(db.query('update ga_ads_control set auto_correction_enabled=true'),/check constraint/);
+ await db.query("update ga_ads_control set auto_correction_enabled=true,auto_correction_authorization='test owner permission'");
+ assert.equal((await db.query("select count(*)::int as n from ga_ads_action_events where event='automatic_correction_settings'")).rows[0].n,1);
+ const correction={...plan,key:'2'.repeat(64),correction:{parentId:pubid,attempt:1}};
+ await db.query('insert into ga_ads_publications(id,account_id,plan) values($1,$2,$3)',[correction.key,account,JSON.stringify(correction)]);
+ await assert.rejects(db.query('insert into ga_ads_publications(id,account_id,plan) values($1,$2,$3)',['3'.repeat(64),account,JSON.stringify({...correction,key:'3'.repeat(64)})]),/unique/);
+ await assert.rejects(db.query('insert into ga_ads_publications(id,account_id,plan) values($1,$2,$3)',['4'.repeat(64),account,JSON.stringify({...plan,key:'4'.repeat(64),correction:{}})]),/check constraint/);
  await db.exec('reset role');await db.exec(await readFile(new URL('../supabase/CONNECTIONS-PROPOSED.sql',import.meta.url),'utf8'));await db.exec(await readFile(new URL('../supabase/AI-ADVISOR-CONNECTION-PROPOSED.sql',import.meta.url),'utf8'));
  await db.exec('set role service_role');await db.query("insert into ga_connections(id,encrypted_credentials,metadata,connected_by) values('ai_advisor','TEST_CIPHERTEXT','{\"provider\":\"anthropic\"}',$1)",[actor]);
  for(const role of ['anon','authenticated']){await db.exec('reset role;set role '+role);await assert.rejects(db.query('select encrypted_credentials from ga_connections'),/permission denied/);}
