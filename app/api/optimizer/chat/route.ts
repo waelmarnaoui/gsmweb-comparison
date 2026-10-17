@@ -34,7 +34,7 @@ export async function POST(request:Request){try{
   let automaticPublication:unknown={available:false};
   try{const p=await readPublishing();automaticPublication={available:true,enabled:p.enabled,globallyPaused:p.globallyPaused,lastCheckedAt:p.lastCheckedAt,error:p.error,publications:p.publications.slice(0,20).map(r=>({model:r.model,partType:r.partType,state:r.state,error:r.error,google:r.google?{groupStatus:r.google.groupStatus,adStatus:r.google.adStatus,approval:r.google.approval,review:r.google.review,topics:r.google.topics}:null,checkedAt:r.checkedAt})),limitations:p.limitations};}catch{/* Missing publishing setup is unknown, never fabricated success. */}
   const modelContext={...context,stock,automaticPublication,accountId:undefined,observation:redact(observation),ronObservation:redact(context.ronObservation)};
-  const reply=await askAdvisor({key,model,message:body.message.trim(),context:modelContext,history:(history??[]).reverse().flatMap(row=>[{role:'user' as const,content:row.user_message},{role:'assistant' as const,content:JSON.stringify(row.assistant_reply as AdvisoryReply)}])});
+  const reply=await askAdvisor({key,model,controlMode:context.control.mode,message:body.message.trim(),context:modelContext,history:(history??[]).reverse().flatMap(row=>[{role:'user' as const,content:row.user_message},{role:'assistant' as const,content:JSON.stringify(row.assistant_reply as AdvisoryReply)}])});
   const saved=await db.from('ga_agent_exchanges').update({assistant_reply:reply,state:'completed'}).eq('id',body.id).eq('actor',user.id).eq('state','pending').select('id');
   if(saved.error||saved.data?.length!==1)throw new Error('Could not save the AI reply.');
   return Response.json({id:body.id,reply},{headers:{'Cache-Control':'no-store'}});

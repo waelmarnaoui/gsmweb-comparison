@@ -13,9 +13,10 @@ export function agentAccount(){
 }
 export async function readAgentContext(now=Date.now()){
  const account=agentAccount(),db=service(),business=businessDay(now),yesterday=previousBusinessDate(business.date);
- const [snapshots,checkins]=await Promise.all([
+ const [snapshots,checkins,automation]=await Promise.all([
   db.from('ga_ads_observations').select('observation').eq('account_id',account).order('slot',{ascending:false}).limit(2),
-  db.from('ga_agent_daily_checkins').select('id,business_date,amount_bani,source,created_at').eq('account_id',account).in('business_date',[business.date,yesterday]).order('id',{ascending:false}).limit(100)
+  db.from('ga_agent_daily_checkins').select('id,business_date,amount_bani,source,created_at').eq('account_id',account).in('business_date',[business.date,yesterday]).order('id',{ascending:false}).limit(100),
+  db.from('ga_ads_control').select('auto_publish_enabled,auto_publish_authorization,global_paused,auto_publish_checked_at,auto_publish_error').eq('account_id',account).maybeSingle()
  ]);
  if(snapshots.error||checkins.error)throw new IntegrationError('Agent storage is unavailable. Install the reviewed agent migrations.',503);
  const observation=(snapshots.data?.[0]?.observation??null) as AdsObservation|null;
@@ -28,7 +29,7 @@ export async function readAgentContext(now=Date.now()){
  return {accountId:account,businessDate:business.date,yesterday,checkinDue:business.checkinDue&&!today,
   today:today?{...receiptsSummary(Number(today.amount_bani)),source:today.source,confirmedAt:today.created_at}:null,
   yesterdayPaymentsBani:prior?Number(prior.amount_bani):null,allowance,
-  control:controlReadiness(dailySpendRon),alerts:monitoringAlerts(converted??observation,convertedPrevious,observation?.today?.date===business.date?dailySpendRon:null,now).filter(a=>!(converted&&a.key==='currency')),observation,fx,ronObservation:converted,
+  control:controlReadiness(dailySpendRon,automation.error?null:automation.data,now),alerts:monitoringAlerts(converted??observation,convertedPrevious,observation?.today?.date===business.date?dailySpendRon:null,now).filter(a=>!(converted&&a.key==='currency')),observation,fx,ronObservation:converted,
   aiConfigured:aiStatus.configured,aiStatus,
   limitations:['Customer payments are owner-confirmed totals, not automatically reconciled CRM profit.','Google reporting is delayed; five-minute checks do not provide five-minute source freshness.','CPA and contribution profit are unavailable until payment attribution is reconciled.','USD uses the owner-approved fixed rate of 4.74 RON. This is a reporting assumption, not a market quote or bank billing rate.']};
 }

@@ -40,10 +40,15 @@ export function monitoringAlerts(current:AdsObservation|null,previous:AdsObserva
  }
  return alerts;
 }
-export function controlReadiness(dailySpendRon:number|null){
+export type AgentAutomation={auto_publish_enabled:boolean;auto_publish_authorization:string|null;global_paused:boolean;auto_publish_checked_at:string|null;auto_publish_error:string|null};
+export function controlReadiness(dailySpendRon:number|null,automation?:AgentAutomation|null,now=Date.now()){
  const blockers=['Open Account control to review stock-control permissions, approved actions and deployed recovery-worker health. Unrestricted account optimization is not enabled.','Paid-customer CPA requires verified attribution; visibility safeguards need a data-backed proposal and your approval.','New consumer repair ads require policy clearance; approval cannot override a policy restriction.'];
  if(dailySpendRon===null||!Number.isFinite(dailySpendRon)||dailySpendRon<=0)blockers.unshift('Confirm positive customer payments for yesterday before granting account control.');
- return {mode:'ADVISE' as const,canEnable:false as const,maxPauseSeconds:600,blockers};
+ const authorized=automation?.auto_publish_enabled===true&&!!automation.auto_publish_authorization;
+ const mode=authorized?(automation!.global_paused?'PAUSED':'CONTROL'):'ADVISE';
+ const checked=Date.parse(automation?.auto_publish_checked_at??''),healthy=authorized&&!automation?.auto_publish_error&&Number.isFinite(checked)&&checked<=now+10000&&now-checked<300000;
+ return {mode:mode as 'CONTROL'|'PAUSED'|'ADVISE',canEnable:false as const,canRun:mode==='CONTROL',scope:'new_stock_search_ads',health:healthy?'current':'unconfirmed',lastCycleAt:automation?.auto_publish_checked_at??null,
+ notice:mode==='CONTROL'?'Automatic control is authorized for new stock/search ads and agent-owned groups. Existing ads and budgets remain protected.':mode==='PAUSED'?'Automatic control is authorized but globally paused. No new automated changes can run.':'Automatic publishing is not authorized. Use Account control to review permissions.',maxPauseSeconds:600,blockers};
 }
 export function pauseDeadline(pausedAt:number,now:number){
  if(!Number.isFinite(pausedAt)||!Number.isFinite(now)||pausedAt>now)throw new Error('Invalid pause timing.');
