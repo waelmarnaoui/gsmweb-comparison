@@ -7,7 +7,7 @@ import {controlSchedulerAuthorized} from '../lib/ads-control/scheduler-auth';
 const now=Date.parse('2026-10-16T12:00:00Z'),account='2050434247';
 function fixture(overrides:Partial<Action>={}){
  let a:Action={id:'00000000-0000-0000-0000-000000000001',account_id:account,kind:'ad_status',resource_name:`customers/${account}/adGroupAds/1~2`,before_value:'ENABLED',after_value:'PAUSED',source:'owner',product_id:null,inventory_fingerprint:null,google_fingerprint:null,reason:'test',state:'approved',created_by:'owner',approved_by:'owner',created_at:new Date(now-1000).toISOString(),expires_at:new Date(now+600000).toISOString(),started_at:null,recovery_due_at:null,request_id:null,error_code:null,idempotency_key:'a'.repeat(64),...overrides};
- const settings:ControlSettings={account_id:account,stock_enabled:true,global_paused:false,version:CONTROL_VERSION,approved_by:'owner',approved_at:new Date(now).toISOString()};
+ const settings:ControlSettings={account_id:account,stock_enabled:true,global_paused:false,protect_existing_ads:false,version:CONTROL_VERSION,approved_by:'owner',approved_at:new Date(now).toISOString()};
  const trace:string[]=[],writes:string[]=[],states:string[]=[];let value=a.before_value,time=now,locked=false,healthy=true;
  const store:ControlStore={lock:async()=>{if(locked)return null;locked=true;return 'lease';},unlock:async()=>{locked=false;},fence:async()=>{trace.push('fence');},settings:async()=>settings,action:async()=>({...a}),transition:async(before,state,patch={})=>{assert.equal(before.state,a.state);a={...a,...patch,state};trace.push('stored:'+state);states.push(state);return {...a};}};
  const google:ControlGoogle={read:async()=>({value,campaignId:'1',approvalStatus:'APPROVED',reviewStatus:'REVIEWED',topics:0,budgetShared:false}),mutate:async(kind,resource,next,validate)=>{trace.push(validate?'validate':'mutate');if(!validate){writes.push(next);value=next;}return {requestId:'google-request'};}};
@@ -100,3 +100,11 @@ test('live ad reads enforce responsive Search scope and bind policy plus exact c
  row.adGroupAd.ad.responsiveSearchAd.headlines[0].text='Changed copy';assert.notEqual((await provider.read('ad_status',resource)).evidenceHash,state.evidenceHash);
  row.campaign.advertisingChannelType='PERFORMANCE_MAX';await assert.rejects(provider.read('ad_status',resource),e=>e instanceof ControlProviderError&&e.code==='google_resource_outside_scope');
 });
+
+test('existing ad protection defaults closed and blocks every existing-resource mutation',async()=>{
+ for(const protection of [true,undefined])for(const kind of ['ad_status','campaign_pause','budget_decrease'] as const){
+  const extra=kind==='budget_decrease'?{resource_name:`customers/${account}/campaignBudgets/3`,before_value:'2000000',after_value:'1000000'}:kind==='campaign_pause'?{resource_name:`customers/${account}/campaigns/1`}:{};
+  const f=fixture({kind,...extra});f.settings.protect_existing_ads=protection;const r=await f.engine.execute(f.get().id);assert.equal(r.error_code,'existing_ads_protected');assert.equal(f.writes.length,0);assert.equal(f.trace.includes('validate'),false);
+ }
+});
+test('protection enabled during validation blocks the live write',async()=>{const f=fixture();const original=f.google.mutate;f.google.mutate=async(...args)=>{const r=await original(...args);if(args[3])f.settings.protect_existing_ads=true;return r;};const r=await f.engine.execute(f.get().id);assert.equal(r.error_code,'existing_ads_protected');assert.equal(f.writes.length,0);});

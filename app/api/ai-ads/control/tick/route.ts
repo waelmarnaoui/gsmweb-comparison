@@ -1,3 +1,4 @@
+import {collectGrowthMonitor} from '@/lib/ai-ads/growth-server';
 import {controlSchedulerAuthorized} from '@/lib/ads-control/scheduler-auth';
 import {runStockControlTick,markControlWorkerFailed} from '@/lib/ads-control/server';
 import {refreshAdsObservation} from '@/lib/ads-monitor-server';
@@ -12,6 +13,7 @@ export async function POST(request:Request){
  try{
   const report=await refreshAdsObservation();
   const stock=await runStockControlTick(false,laptop??undefined);
-  return Response.json({...stock,reportingAvailable:!report.refreshError},{headers:{'Cache-Control':'no-store'}});
+  const growth=await collectGrowthMonitor();
+  return Response.json({...stock,searchMonitoringAvailable:growth.reliable,reportingAvailable:!report.refreshError},{headers:{'Cache-Control':'no-store'}});
  }catch{try{await markControlWorkerFailed(false,laptop??undefined);}catch{/* A failed write leaves health stale. */}return Response.json({error:'Control worker could not complete. Review account-control health and pending actions.'},{status:503,headers:{'Cache-Control':'no-store'}});}
 }

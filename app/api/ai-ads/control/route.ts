@@ -1,3 +1,4 @@
+import {collectGrowthMonitor} from '@/lib/ai-ads/growth-server';
 import {requireAdmin,apiError} from '@/lib/server';
 import {sameOrigin} from '@/lib/connections';
 import {readControl,controlResources,setControl,linkProduct,unlinkProduct,proposeAction,approveAction,executeAction,reconcileAction,proposeRollback,runStockControlTick,markControlWorkerFailed} from '@/lib/ads-control/server';
@@ -21,7 +22,7 @@ export async function POST(request:Request){try{
  switch(input.operation){
   case 'pair':return Response.json(await createLaptopPairing(user.id,text('canary',20)),{headers:{'Cache-Control':'no-store'}});
   case 'tick':{
-   try{const reporting=await refreshAdsObservation();const result=await runStockControlTick(true);return Response.json({...result,reportingAvailable:!reporting.refreshError});}
+   try{const reporting=await refreshAdsObservation();const result=await runStockControlTick(true);const growth=await collectGrowthMonitor();return Response.json({...result,searchMonitoringAvailable:growth.reliable,reportingAvailable:!reporting.refreshError});}
    catch(error){try{await markControlWorkerFailed(true);}catch{}throw error;}
   }
   case 'settings':
