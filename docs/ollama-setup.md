@@ -30,3 +30,29 @@ without an appropriate legal basis and review of those services' terms.
 On Windows, restrict access to the local token file to your Windows account.
 The gateway token is stored encrypted by the app using its existing connection
 storage. No Supabase schema or CRM changes are required.
+
+## Slow or incomplete responses
+
+Chat is submitted as a background job on the local gateway, with a 30-minute
+model deadline. The app checks status through short authenticated requests every
+10 seconds while visible; Vercel never holds a request open for 30 minutes.
+Status checks never restart generation. The settings connection test is still a
+short static prompt with a four-minute deadline inside its 300-second route limit.
+Hosting configuration must support that settings-test duration. The gateway keeps the
+model loaded for 15 minutes and pins a 4096-token context. Replies use a schema
+and a 1200-token ceiling. There are no automatic retries. Long user messages
+within the existing 4000-character chat limit are not shortened. Saved context
+and history are bounded; advice does not represent a full account audit.
+
+When updating the gateway script, restart its terminal process. The token file
+is retained, so do not regenerate or share the token. No tunnel change is needed
+if the same tunnel still points at port 11435.
+
+In-progress and completed local jobs are retained in gateway memory for up to one
+hour; they are not persisted to disk. Restarting the gateway loses unfinished or
+uncollected results. The app reports that outcome without resending. Completed
+replies are saved to the existing app-owned chat history when collected. No new
+tables are required. A disconnected computer or closed page delays collection,
+not local generation. Return to chat within the retention period to collect it.
+Only one model generation runs at a time. Context and token limits still apply;
+30 minutes does not mean unlimited prompt or reply length.

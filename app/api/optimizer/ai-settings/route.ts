@@ -2,7 +2,7 @@ import {requireAdmin,apiError} from '@/lib/server';
 import {sameOrigin} from '@/lib/connections';
 import {advisorReadiness,configureAdvisor} from '@/lib/advisor-settings-server';
 import {IntegrationError} from '@/lib/integration-error';
-export const maxDuration=120;
+export const maxDuration=300;
 export async function GET(){try{await requireAdmin();return Response.json(await advisorReadiness(),{headers:{'Cache-Control':'no-store'}});}catch(e){return apiError(e);}}
 export async function POST(request:Request){try{
  const {user}=await requireAdmin();sameOrigin(request);if(Number(request.headers.get('content-length')??0)>8192)throw new IntegrationError('AI settings request is too large.',413);
