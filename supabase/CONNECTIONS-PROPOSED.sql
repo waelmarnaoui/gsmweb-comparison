@@ -30,8 +30,13 @@ begin
  return new;
 end $$;
 revoke all on function public.ga_log_connection_change() from public,anon,authenticated;
-create trigger ga_connection_change after insert or update on public.ga_connections
-for each row execute function public.ga_log_connection_change();
+do $ begin
+ if not exists(select 1 from pg_trigger where tgname='ga_connection_change'
+  and tgrelid='public.ga_connections'::regclass) then
+  create trigger ga_connection_change after insert or update on public.ga_connections
+  for each row execute function public.ga_log_connection_change();
+ end if;
+end $;
 create or replace function public.ga_disconnect_connection(p_id text,p_actor uuid) returns void
 language plpgsql security definer set search_path=public as $$
 begin
