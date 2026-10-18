@@ -9,7 +9,7 @@ export function createGateway({token,fetcher=fetch,jobTimeout=1800000}){
  const jobs=new Map();let active=false;
  const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
  async function complete(body,timeout){
-  const response=await fetcher('http://127.0.0.1:11434/api/chat',{method:'POST',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'llama3.1:8b',messages:body.messages,stream:false,keep_alive:'15m',options:{temperature:0,num_ctx:4096,num_predict:1200},format:body.response_format?.json_schema?.schema??'json'}),signal:AbortSignal.timeout(timeout)});
+  const response=await fetcher('http://127.0.0.1:11434/api/chat',{method:'POST',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'llama3.1:8b',messages:body.messages,stream:false,keep_alive:'15m',options:{temperature:0,num_ctx:8192,num_predict:2400},format:body.response_format?.json_schema?.schema??'json'}),signal:AbortSignal.timeout(timeout)});
   if(!response.ok)throw new Error('Provider unavailable');
   const raw=await response.text();if(raw.length>100000)throw new Error('Oversized response');
   const result=JSON.parse(raw);

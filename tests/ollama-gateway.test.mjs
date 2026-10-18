@@ -5,7 +5,7 @@ import {createGateway} from '../scripts/ollama-gateway.mjs';
 
 test('background job acknowledges immediately, is authenticated, and runs once across polls and duplicate submissions',async t=>{
  let finish,calls=0;const gate=new Promise(resolve=>{finish=resolve;});
- const server=createGateway({token:'test-secret',fetcher:async(url,init)=>{calls++;assert.equal(url,'http://127.0.0.1:11434/api/chat');assert.equal(init.headers.Authorization,undefined);assert.equal(JSON.parse(init.body).options.num_ctx,4096);await gate;return Response.json({done:true,done_reason:'stop',message:{content:'{"reply":"ok"}'}});}});
+ const server=createGateway({token:'test-secret',fetcher:async(url,init)=>{calls++;assert.equal(url,'http://127.0.0.1:11434/api/chat');assert.equal(init.headers.Authorization,undefined);assert.equal(JSON.parse(init.body).options.num_ctx,8192);await gate;return Response.json({done:true,done_reason:'stop',message:{content:'{"reply":"ok"}'}});}});
  server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>{server.closeAllConnections();server.close();});
  const base='http://127.0.0.1:'+server.address().port,headers={Authorization:'Bearer test-secret','Content-Type':'application/json'},id='12345678-1234-4123-8123-123456789abc',request={model:'llama3.1:8b',stream:false,messages:[{role:'user',content:'static test'}]};
  assert.equal((await fetch(base+'/v1/jobs/'+id)).status,401);

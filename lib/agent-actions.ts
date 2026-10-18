@@ -13,10 +13,12 @@ import {validateSourceFiles} from './agent-source-policy';
 import {queueAgentJob,readAgentAccess,reviewAgentCode,approveAgentCode} from './agent-jobs-server';
 import {executeRecordedTool,type ToolActor} from './agent-tool-runtime';
 import {ADS_WEB_ONLY} from './ads-web-mode';
+import {saveAdsSchema} from './ollama-actions';
 export function actionTools(who:ToolActor){
  const db=service(),range=z.object({from:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),to:z.string().regex(/^\d{4}-\d{2}-\d{2}$/)}).strict();
  function recorded(name:string,mutating:boolean,fn:(input:any,id:string)=>Promise<unknown>){return (input:any,options:{toolCallId:string})=>executeRecordedTool(db,who,options.toolCallId,name,input,mutating,id=>fn(input,id));}
  return {
+  save_ad_drafts:tool({description:'Save 1-5 unpublished phone-repair ad drafts in the app library. Does not publish, certify policy compliance or make claims about live stock.',inputSchema:saveAdsSchema,execute:recorded('save_ad_drafts',true,async(p,id)=>({status:'confirmed',drafts:p.drafts.map((draft:any,index:number)=>({...draft,id:id+':'+index,state:'draft',verification:'Needs factual, stock and policy review before publishing.'})),notice:'Saved to the app draft library only. Not sent to Google Ads.'}))}),
   account_overview:tool({description:'Read current Ads monitoring, actual daily allowance and owner-confirmed daily payments. This does not substitute for CRM payment totals.',inputSchema:z.object({}).strict(),execute:recorded('account_overview',false,async()=>{const c=await readAgentContext();return {...c,aiStatus:undefined,accountId:undefined,observation:c.observation?{...c.observation,accountId:undefined,requestIds:undefined}:null,ronObservation:c.ronObservation?{...c.ronObservation,accountId:undefined,requestIds:undefined}:null};})}),
   customer_payments:tool({description:'Read actual active customer payments from the CRM for business dates, including cash, card and transfer. Returns daily receipts/refunds in bani, not profit or Ads attribution.',inputSchema:range,execute:recorded('customer_payments',false,async p=>readBusinessPayments(p.from,p.to))}),
   website_clicks:tool({description:'Read stored website click events, pages without query strings, recorded sessions and import health. These are tracked events, not complete website traffic or all ad clicks.',inputSchema:range,execute:recorded('website_clicks',false,async p=>readBusinessClicks(p.from,p.to))}),

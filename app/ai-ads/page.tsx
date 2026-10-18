@@ -2,6 +2,7 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import type {StockSnapshot} from '@/lib/ai-ads/monitor';
 import AdPolicyReview from '@/components/ad-policy-review';
+import AgentActionReview from '@/components/agent-action-review';
 import {gsmwebLocalPlan} from '@/lib/ai-ads/business-profile';
 import {advertisingPartType,COPY_RULES_VERSION} from '@/lib/ai-ads/copy-rules';
 type Monitor={snapshot:StockSnapshot|null;stale:boolean;reliable:boolean;lastAttemptFailed:boolean;lastAttemptAt:string|null;executionEnabled:false;mode:string;diagnostic?:{code:string;table:string|null;action:string}|null};
@@ -60,6 +61,7 @@ export default function AiAdsManager(){
  <section className="setup-provider"><h2>Search-driven opportunities</h2><p><a href="/ai-ads/opportunities">View reported searches, stock-matched drafts and notifications</a>. Existing ads are protected.</p><h2>Monitor and prepare drafts</h2><p>This page prepares drafts. <a href="/ai-ads/control">Open Account control</a> to configure stock-related pauses and review exact account changes. No new campaigns are published here. Google’s third-party consumer technical-support policy includes offline hardware repair. The automatic publisher submits truthful ads as Enabled inside new paused groups for Google review. Groups open only after the exact ad is approved without restrictions and stock, hours and spending checks pass. Open Search opportunities for actual submission status.</p><a href="https://support.google.com/adspolicy/answer/13527027?hl=en" target="_blank" rel="noreferrer">Read the official policy</a></section>
  <section className="setup-provider"><h2>Your local campaign brief</h2><p><a href={gsmwebLocalPlan.website} target="_blank" rel="noreferrer">gsmweb.site</a> · {gsmwebLocalPlan.address}</p><p>Focus: {gsmwebLocalPlan.targetArea}. Proposed location matching: people in or regularly in the selected area, rather than interest-only searches from elsewhere.</p><p>Exact Google location boundaries and any radius are not yet verified or applied. Top placement and the lowest cost cannot both be guaranteed. The 3 lei CPC is a goal, not an auction guarantee.</p><p>Website hours: {gsmwebLocalPlan.websiteHours}. Confirm these before an ad schedule is activated.</p></section>
  <AdPolicyReview/>
+ <div id="saved-agent-drafts"><AgentActionReview draftsOnly/></div>
 </details>
  </main></div>;
 }
