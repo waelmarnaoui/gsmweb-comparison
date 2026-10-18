@@ -10,7 +10,7 @@ export async function lowRequestAdsRead<T>(account:string,kind:AdsReadKind,colle
  const db=service(),locks=controlStore(db);
  try{return await gatedAdsRead(kind,{
   lock:()=>locks.lock(account),unlock:t=>locks.unlock(account,t),
-  receipts:async()=>{const r=await db.from('ga_audit').select('action,created_at').eq('entity','google_ads_read_gate').eq('record_id',account).gte('created_at',new Date(Date.now()-48*3600000).toISOString()).order('created_at',{ascending:false}).limit(100);if(r.error)throw new Error('Read gate storage unavailable.');return r.data??[];},
+  receipts:async()=>{const r=await db.from('ga_audit').select('id,action,created_at').eq('entity','google_ads_read_gate').eq('record_id',account).gte('created_at',new Date(Date.now()-48*3600000).toISOString()).order('id',{ascending:false}).limit(100);if(r.error)throw new Error('Read gate storage unavailable.');return r.data??[];},
   record:async action=>{const r=await db.from('ga_audit').insert({actor:null,action,entity:'google_ads_read_gate',record_id:account,details:{mode:'web_only'}});if(r.error)throw new Error('Read gate receipt unavailable.');}
  },collect,e=>isGoogleQuotaError(e)||e instanceof AdsReportingError&&e.httpStatus===429);}
  catch(error){
