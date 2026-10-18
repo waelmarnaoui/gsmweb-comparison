@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import {agentReplySchema} from './advisor-reply';
 export const OLLAMA_READ_TOOLS=['account_overview','customer_payments','website_clicks','business_records','inventory','advertising_status','agent_access_and_jobs','source_files','read_source_file'] as const;
-export const OLLAMA_WRITE_TOOLS=['save_ad_drafts','remember_business_preference','record_daily_payments','run_control_cycle','automation_settings','create_source_change','deploy_source_change'] as const;
+export const OLLAMA_WRITE_TOOLS=['save_ad_drafts','remember_business_preference','record_daily_payments','run_control_cycle','automation_settings','create_source_change','deploy_source_change','queue_research_task'] as const;
 export const ollamaActionSchema=z.object({tool:z.enum([...OLLAMA_READ_TOOLS,...OLLAMA_WRITE_TOOLS]),inputJson:z.string().max(55000),reason:z.string().min(1).max(500)}).strict();
 export const ollamaAgentReplySchema=agentReplySchema.extend({actions:z.array(ollamaActionSchema).max(3).default([])});
 export type OllamaAction=z.infer<typeof ollamaActionSchema>;
