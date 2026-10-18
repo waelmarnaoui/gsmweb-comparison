@@ -3,6 +3,7 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import AgentComposer from './agent-composer';
 import AgentActionReview from './agent-action-review';
 import AdsCooldownReset from './ads-cooldown-reset';
+import ResearchTasks from './research-tasks';
 import {ADS_WEB_ONLY} from '@/lib/ads-web-mode';
 import {RefreshCw,Square,Volume2} from 'lucide-react';
 import type {ChatAttachment} from '@/lib/chat-attachments';
@@ -85,6 +86,7 @@ export default function AdsAgent(){
  <fieldset disabled={busy||voiceActive} className="agent-chat-tools" aria-label="Chat control mode"><legend>Chat mode</legend><label><input type="radio" name="chat-mode" checked={readOnly} onChange={()=>setReadOnly(true)}/> Read Only</label><label><input type="radio" name="chat-mode" checked={!readOnly} onChange={()=>{if(window.confirm('Allow supported action proposals? Every Ollama change still needs your approval. Existing permissions, spending limits, policy checks and web-only restrictions remain.'))setReadOnly(false);}}/> Full Control</label></fieldset>
  <AgentComposer busy={busy||waitingForReply} enabled={!!context?.aiConfigured} onSend={send} onVoiceChange={setVoiceActive}/>
  <AgentActionReview revision={history.at(-1)?.id+':'+history.at(-1)?.state}/>
+ <ResearchTasks/>
  {!context?.aiConfigured&&<p className="agent-small">{context?.aiStatus?.notice||'AI connection required.'} <a href="/optimizer/settings">Open settings</a></p>}
  <details className="agent-page-tools"><summary>Daily check-in & account controls</summary>
  <div className="agent-goals"><div><small>Daily customer payment target</small><strong>4,000 RON</strong></div><div><small>Allowed ad spend today</small><strong>{context?.allowance.allowanceBani===null||!context?'Unconfirmed':`${(context.allowance.allowanceBani/100).toFixed(2)} RON`}</strong></div><div><small>Confirmed payments today</small><strong>{context?.today?`${(context.today.amountBani/100).toFixed(2)} RON`:'Awaiting check-in'}</strong></div></div>

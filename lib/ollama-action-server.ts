@@ -19,6 +19,7 @@ export function ollamaToolCatalog(message:string,who:ToolActor){
  if(/remember|preference|tine minte|ține minte/i.test(message))names.push('remember_business_preference');
  if(/code|source|cod|deploy|merge|modif|feature|implement/i.test(message))names.push('source_files','read_source_file','create_source_change','deploy_source_change');
  if(/automat|pause|resume|report|raport|control/i.test(message))names.push('automation_settings','run_control_cycle');
+ if(/research|overnight|tonight|night|cercet|noapte/i.test(message))names.push('queue_research_task');
  const selected=[...new Set(names)].slice(-5);
  return selected.map(name=>{const tool=all[name as keyof typeof all];return {name,description:typeof tool.description==='string'?tool.description:'',inputSchema:z.toJSONSchema(tool.inputSchema as z.ZodType)};});
 }
