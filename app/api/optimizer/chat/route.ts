@@ -3,7 +3,7 @@ import {sameOrigin} from '@/lib/connections';
 import {readAgentContext,agentAccount} from '@/lib/agent-context';
 import {type AdvisoryReply} from '@/lib/agent-model';
 import {runActionAgent as runGoogleAgent} from '@/lib/action-agent-model';
-import {submitOllamaJob,readOllamaJob,pendingOllamaReply,OLLAMA_PENDING_MARKER,OLLAMA_JOB_MS,OllamaProviderError} from '@/lib/ollama-advisor';
+import {submitOllamaJob,readOllamaJob,pendingOllamaReply,ollamaHistoryContent,OLLAMA_PENDING_MARKER,OLLAMA_JOB_MS,OllamaProviderError} from '@/lib/ollama-advisor';
 import {sourceContent} from '@/lib/agent-source-policy';
 import {actionTools} from '@/lib/agent-actions';
 export const maxDuration=300;
@@ -15,6 +15,7 @@ import {stockAdvisorEvidence} from '@/lib/ai-ads/monitor';
 import {parseChatAttachments} from '@/lib/chat-attachments';
 import {CHAT_MESSAGE_LIMIT,savedChatMessage} from '@/lib/chat-policy';
 import {chatFailureMessage,chatFailureReply} from '@/lib/agent-failure';
+import {ollamaToolCatalog,handleOllamaActions} from '@/lib/ollama-action-server';
 export async function GET(){try{
  const {user}=await requireAdmin();const account=agentAccount();
  const {data,error}=await service().from('ga_agent_exchanges').select('id,user_message,assistant_reply,state,created_at,observation_at').eq('account_id',account).eq('actor',user.id).order('created_at',{ascending:false}).limit(20);
@@ -27,7 +28,11 @@ export async function GET(){try{
    try{
     if(age>OLLAMA_JOB_MS+120000)throw new OllamaProviderError('timeout');
     if(configuration.provider!=='ollama'||!configuration.key)continue;
-    reply=await readOllamaJob({key:configuration.key,baseURL:configuration.baseURL!,id:row.id});
+    const generated=await readOllamaJob({key:configuration.key,baseURL:configuration.baseURL!,id:row.id});
+    if(generated){
+     const outcomes=await handleOllamaActions({actor:user.id,account,exchangeId:row.id,userMessage:row.user_message,readOnly:!row.assistant_reply?.evidence?.includes('ollama-write-proposals-enabled')},generated.actions);
+     reply={...generated,...(generated.actions.length?{reply:'Agent proposal (not a completed change):\n'+generated.reply}:{}),evidence:[...generated.evidence,...outcomes.map(text=>text.slice(0,1900))].slice(-30)};
+    }
    }catch(error){
     // Brief transport failures never resubmit work or discard a running job.
     if(age<30000||age<OLLAMA_JOB_MS+120000&&(!(error instanceof OllamaProviderError)||!['missing','invalid','length'].includes(error.reason)))continue;
@@ -69,10 +74,10 @@ export async function POST(request:Request){try{
   const preferences=await db.from('ga_agent_preferences').select('name,value,updated_at').eq('account_id',context.accountId).order('name').limit(30);
   const modelContext={...context,businessPreferences:preferences.error?{available:false}:preferences.data,stock,automaticPublication,accountId:undefined,observation:redact(observation),ronObservation:redact(context.ronObservation)};
   if(configuration.provider==='ollama'){
-   const marker=await db.from('ga_agent_exchanges').update({assistant_reply:pendingOllamaReply()}).eq('id',body.id).eq('actor',user.id).eq('state','pending').select('id');
+   const marker=await db.from('ga_agent_exchanges').update({assistant_reply:pendingOllamaReply(body.readOnly===false)}).eq('id',body.id).eq('actor',user.id).eq('state','pending').select('id');
    if(marker.error||marker.data?.length!==1)throw new Error('Could not prepare background request.');
-   await submitOllamaJob({id:body.id,key,baseURL:configuration.baseURL!,message:body.message.trim(),context:modelContext,history:(history??[]).reverse().flatMap(row=>[{role:'user' as const,content:(()=>{try{return sourceContent(row.user_message);}catch{return '[Excluded]';}})()},{role:'assistant' as const,content:JSON.stringify(row.assistant_reply)}])});
-   return Response.json({id:body.id,pending:true,reply:pendingOllamaReply()},{status:202,headers:{'Cache-Control':'no-store'}});
+   await submitOllamaJob({id:body.id,key,baseURL:configuration.baseURL!,message:body.message.trim(),context:modelContext,capabilities:ollamaToolCatalog(body.message,{actor:user.id,account:context.accountId,exchangeId:body.id,userMessage:body.message,readOnly:body.readOnly!==false}),history:(history??[]).reverse().flatMap(row=>[{role:'user' as const,content:(()=>{try{return sourceContent(row.user_message);}catch{return '[Excluded]';}})()},{role:'assistant' as const,content:ollamaHistoryContent(row.assistant_reply)}])});
+   return Response.json({id:body.id,pending:true,reply:pendingOllamaReply(body.readOnly===false)},{status:202,headers:{'Cache-Control':'no-store'}});
   }
   const reply=await runActionAgent({key,model,attachments,tools:actionTools({exchangeId:body.id,account:context.accountId,actor:user.id,userMessage:body.message.trim(),readOnly:body.readOnly!==false||body.message.trim()==='Analyze the latest account report. Explain what you observed, the highest priority improvement, expected impact, risks and missing information. Do not change the account.'}),message:body.message.trim(),context:modelContext,history:(history??[]).reverse().flatMap(row=>[{role:'user' as const,content:(()=>{try{return sourceContent(row.user_message);}catch{return '[Credential-like message excluded.]';}})()},{role:'assistant' as const,content:JSON.stringify(row.assistant_reply as AdvisoryReply)}])});
   const saved=await db.from('ga_agent_exchanges').update({assistant_reply:reply,state:'completed'}).eq('id',body.id).eq('actor',user.id).eq('state','pending').select('id');
