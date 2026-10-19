@@ -1,0 +1,2 @@
+export function normalizeSearch(value:string){return value.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/([a-z])([0-9])/g,'$1 $2').replace(/([0-9])([a-z])/g,'$1 $2').replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');}
+export function safeSearchTerm(value:unknown):value is string{return typeof value==='string'&&value.length>0&&value.length<=200&&!/[\u0000-\u001f@{}]|https?:|www\.|(?:\+?\d[\s.-]?){8,}/i.test(value);}
