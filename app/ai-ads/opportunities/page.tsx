@@ -1,6 +1,7 @@
 'use client';
 
 import {useCallback,useEffect,useRef,useState} from 'react';
+import BulkAdsWorkspace from '@/components/bulk-ads-workspace';
 
 
 
@@ -13,6 +14,7 @@ import '../../optimizer/agent.css';
 type Data={reliable:boolean;error:string|null;report:{copyRulesVersion?:string;search:SearchReport;opportunities:Opportunity[];activeCampaigns:string[];publicationBlockedReason:string}|null;notifications:{notification_key:string;created_at:string;details:{message:string}}[]};
 
 export default function SearchOpportunities(){
+ const [tab,setTab]=useState<'bulk'|'search'>('bulk');
 
  const [data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[voice,setVoice]=useState(false);
 
@@ -47,6 +49,8 @@ export default function SearchOpportunities(){
  const report=data?.report,search=report?.search,current=!!data?.reliable&&!error;
 
  return <main className="setup-main"><div className="workspace-heading"><h1>Create ads</h1><a className="secondary" href="/optimizer/ads">Ads & status</a></div>
+ <nav className="bulk-page-tabs" aria-label="Ad creation views" role="tablist"><button role="tab" aria-selected={tab==='bulk'} onClick={()=>setTab('bulk')}>Bulk ad builder</button><button role="tab" aria-selected={tab==='search'} onClick={()=>setTab('search')}>Search & stock opportunities</button></nav>
+ {tab==='bulk'?<BulkAdsWorkspace/>:<>
  <div className="workspace-toolbar"><button className="primary" disabled={busy} onClick={()=>void refresh(true)}>{busy?'Preparing drafts...':'Prepare drafts from searches & stock'}</button><span className="agent-small">{report?.opportunities.length??0} prepared drafts</span></div>
  {error&&<p role="alert" className="agent-notice">{error}</p>}{data?.error&&<p role="alert" className="agent-notice">Latest collection failed: {data.error}. Saved results are not current.</p>}{!current&&data&&<p role="alert">Current stock and search evidence is unconfirmed.</p>}
  {search&&<p className="agent-small">{search.terms.length} reported searches · {report!.activeCampaigns.length} campaigns within their schedule · Last collection: {new Date(search.fetchedAt).toLocaleString('ro-RO',{timeZone:'Europe/Bucharest'})}</p>}
@@ -55,6 +59,7 @@ export default function SearchOpportunities(){
  {report&&!report.opportunities.length&&<p className="empty-state">No stock-matched drafts available from the reported searches.</p>}{!report&&!busy&&<p className="empty-state">No complete search collection yet.</p>}
  <details className="publishing-settings"><summary>Publication safeguards</summary><p>Preparation does not publish an ad. New truthful installation-only ads enter Google review through the separately authorized publishing workflow. Groups remain paused until exact Google approval and current stock, campaign schedule, targeting and allowance checks pass. Original ads and budgets stay protected.</p><p>Google can restrict third-party technical-support offers. A business-policy rejection is not corrected by disguising a repair as a part sale. <a href="https://support.google.com/adspolicy/answer/13527027?hl=en" target="_blank" rel="noreferrer">Google policy</a>.</p><p><a href="/optimizer/ads">Publishing settings and actual submission results</a></p></details>
  <details className="publishing-settings"><summary>Recent draft notifications ({data?.notifications.length??0})</summary><div className="table-scroll"><table><thead><tr><th>Time</th><th>Event</th></tr></thead><tbody>{data?.notifications.map(item=><tr key={item.notification_key}><td>{new Date(item.created_at).toLocaleString('ro-RO',{timeZone:'Europe/Bucharest'})}</td><td>{item.details.message}</td></tr>)}</tbody></table></div></details>
+ </>}
  </main>;
 }
 

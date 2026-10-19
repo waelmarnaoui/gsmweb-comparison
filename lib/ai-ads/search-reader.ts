@@ -1,7 +1,7 @@
 import {ADS_REPORTING_VERSION} from '../ads-monitor';
 import {ControlProviderError,safeGoogleCodes} from '../ads-control/google';
 import {campaignOpen,safeSearchTerm,type SearchReport,type SearchCampaign,type Schedule,type SearchTerm} from './search-growth';
-type Options={accountId:string;loginCustomerId?:string;developerToken?:string;token:()=>Promise<string>;fetcher?:typeof fetch;now?:()=>number};
+type Options={accountId:string;loginCustomerId?:string;developerToken?:string;token:()=>Promise<string>;fetcher?:typeof fetch;now?:()=>number;lookbackDays?:7|30;researchOnly?:boolean};
 const numeric=(v:unknown)=>typeof v==='string'&&/^\d{1,20}$/.test(v);
 const metric=(v:unknown)=>{const s=String(v??'0');if(!/^\d+$/.test(s)||!Number.isSafeInteger(Number(s)))throw new Error('Invalid search metric.');return s;};
 export function createSearchReader(o:Options){
@@ -22,7 +22,8 @@ export function createSearchReader(o:Options){
   const identity=await search('SELECT customer.id, customer.currency_code, customer.time_zone FROM customer LIMIT 1'),account=identity[0]?.customer;
   if(identity.length!==1||String(account?.id)!==o.accountId||!/^\w{3}$/.test(account?.currencyCode??'')||typeof account.timeZone!=='string')throw new Error('Search reporting identity is unverified.');
   const date=()=>{const p=new Intl.DateTimeFormat('en-US',{timeZone:account.timeZone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now()),get=(k:string)=>p.find(x=>x.type===k)!.value;return `${get('year')}-${get('month')}-${get('day')}`;};
-  const end=date(),start=new Date(Date.parse(end+'T00:00:00Z')-6*86400000).toISOString().slice(0,10);
+  const days=o.lookbackDays??7;if(![7,30].includes(days))throw new Error('Invalid search window.');
+  const end=date(),start=new Date(Date.parse(end+'T00:00:00Z')-(days-1)*86400000).toISOString().slice(0,10);
   const campaignRows=await search("SELECT campaign.id, campaign.name, campaign.status, campaign.start_date_time, campaign.end_date_time FROM campaign WHERE campaign.advertising_channel_type = 'SEARCH' AND campaign.status != 'REMOVED'");
   const campaigns:SearchCampaign[]=[],ids=new Set<string>();
   for(const row of campaignRows){const c=row.campaign,id=String(c?.id??'');if(!numeric(id)||ids.has(id)||!['ENABLED','PAUSED'].includes(c?.status))throw new Error('Invalid campaign identity.');ids.add(id);
@@ -36,7 +37,8 @@ export function createSearchReader(o:Options){
    const schedule:Schedule={day:s.dayOfWeek,start:sh*60+minute(s.startMinute??'ZERO'),end:eh*60+minute(s.endMinute??'ZERO')};if(schedule.end<=schedule.start||schedule.end>1440)throw new Error('Invalid campaign schedule.');campaign.schedule.push(schedule);
   }
   const active=campaigns.filter(c=>campaignOpen(c,account.timeZone,now())),terms:SearchTerm[]=[];let privacyFiltered=0;
-  if(active.length){
+  const collectTerms=o.researchOnly?campaigns.length>0:active.length>0;
+  if(collectTerms){
    const rows=await search(`SELECT campaign.id, ad_group.id, search_term_view.resource_name, search_term_view.search_term, metrics.impressions, metrics.clicks, metrics.cost_micros FROM search_term_view WHERE segments.date BETWEEN '${start}' AND '${end}' AND campaign.advertising_channel_type = 'SEARCH' AND campaign.status != 'REMOVED' AND ad_group.status != 'REMOVED'`),seen=new Set<string>();
    for(const row of rows){const campaignId=String(row.campaign?.id??''),adGroupId=String(row.adGroup?.id??''),term=row.searchTermView?.searchTerm,resource=row.searchTermView?.resourceName;
     if(!ids.has(campaignId)||!numeric(adGroupId)||typeof resource!=='string'||!resource.startsWith(`customers/${o.accountId}/searchTermViews/${campaignId}~${adGroupId}~`)||seen.has(resource))throw new Error('Search row identity incomplete.');seen.add(resource);
@@ -45,6 +47,6 @@ export function createSearchReader(o:Options){
    }
   }
   if(date()!==end)throw new Error('Account date changed during search collection.');
-  return {accountId:o.accountId,currency:account.currencyCode,timeZone:account.timeZone,fetchedAt:new Date(now()).toISOString(),windowStart:start,windowEnd:end,campaigns,terms,privacyFiltered,complete:true,termsCollected:active.length>0};
+  return {accountId:o.accountId,currency:account.currencyCode,timeZone:account.timeZone,fetchedAt:new Date(now()).toISOString(),windowStart:start,windowEnd:end,campaigns,terms,privacyFiltered,complete:true,termsCollected:collectTerms};
  }};
 }

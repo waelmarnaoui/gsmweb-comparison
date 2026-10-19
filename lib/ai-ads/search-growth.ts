@@ -1,12 +1,12 @@
 import {digest,type InventoryPart} from './inventory';
 import {generateRepairDraft,type RepairDraft} from './policy';
+import {normalizeSearch,safeSearchTerm} from './search-terms';
+export {normalizeSearch,safeSearchTerm} from './search-terms';
 export type Schedule={day:string;start:number;end:number};
 export type SearchCampaign={id:string;name:string;status:string;startDate:string|null;endDate:string|null;schedule:Schedule[]};
 export type SearchTerm={campaignId:string;adGroupId:string;term:string;impressions:number;clicks:number;costMicros:string};
 export type SearchReport={accountId:string;currency:string;timeZone:string;fetchedAt:string;windowStart:string;windowEnd:string;campaigns:SearchCampaign[];terms:SearchTerm[];privacyFiltered:number;complete:true;termsCollected:boolean};
 export type Opportunity={id:string;campaignId:string;campaignName:string;adGroupId:string;productId:string;model:string;partType:string;observedTerms:string[];clicks:number;impressions:number;costMicros:string;stock:number;inventoryFingerprint:string;draft:RepairDraft;state:'policy_blocked';explanation:string};
-export function normalizeSearch(value:string){return value.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/([a-z])([0-9])/g,'$1 $2').replace(/([0-9])([a-z])/g,'$1 $2').replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');}
-export function safeSearchTerm(value:unknown):value is string{return typeof value==='string'&&value.length>0&&value.length<=200&&!/[\u0000-\u001f@{}]|https?:|www\.|(?:\+?\d[\s.-]?){8,}/i.test(value);}
 export function campaignOpen(c:SearchCampaign,timeZone:string,now=Date.now()){
  const parts=new Intl.DateTimeFormat('en-US',{timeZone,year:'numeric',month:'2-digit',day:'2-digit',weekday:'long',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(now),get=(k:string)=>parts.find(p=>p.type===k)!.value;
  const date=`${get('year')}-${get('month')}-${get('day')}`,minute=Number(get('hour'))*60+Number(get('minute'));

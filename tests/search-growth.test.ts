@@ -36,14 +36,15 @@ test('duplicate model evidence creates one factual blocked draft, no invented me
  assert.throws(()=>prepareSearchOpportunities({...r,fetchedAt:new Date(now-900001).toISOString()},[part()],now),/stale/);
  assert.equal(prepareSearchOpportunities({...r,campaigns:[{...campaign,status:'PAUSED'}]},[part()],now).length,0);
 });
-function readerFixture(outside=false,fail=false){
+function readerFixture(outside=false,fail=false,researchOnly=false){
  const queries:string[]=[];const fetcher:typeof fetch=async(url,init)=>{assert.match(String(url),/googleAds:search$/);assert.equal(init?.method,'POST');const query=JSON.parse(String(init?.body)).query;queries.push(query);assert.doesNotMatch(query,/mutate|INSERT|UPDATE|DELETE/);
  if(fail)return Response.json({error:{message:'DO_NOT_LEAK_TOKEN',details:[]}},{status:403});
  if(query.includes('FROM customer'))return Response.json({results:[{customer:{id:account,currencyCode:'USD',timeZone:'Europe/Bucharest'}}]});
  if(query.includes('FROM campaign_criterion'))return Response.json({results:[{campaign:{id:'1'},campaignCriterion:{adSchedule:{dayOfWeek:'SATURDAY',startHour:11,startMinute:'ZERO',endHour:19,endMinute:'ZERO'}}}]});
  if(query.includes('FROM campaign WHERE')){assert.match(query,/campaign.start_date_time/);return Response.json({results:[{campaign:{id:'1',name:'Local',status:outside?'PAUSED':'ENABLED',startDateTime:'2026-01-01 00:00:00',endDateTime:'2037-12-30 23:59:59'}}]});}
- return Response.json({results:[{campaign:{id:'1'},adGroup:{id:'2'},searchTermView:{resourceName:`customers/${account}/searchTermViews/1~2~term`,searchTerm:'display iphone 15 pro max'},metrics:{clicks:'2',impressions:'10',costMicros:'100'}}]});};return {queries,reader:createSearchReader({accountId:account,token:async()=>'test-token',fetcher,now:()=>now})};
+ return Response.json({results:[{campaign:{id:'1'},adGroup:{id:'2'},searchTermView:{resourceName:`customers/${account}/searchTermViews/1~2~term`,searchTerm:'display iphone 15 pro max'},metrics:{clicks:'2',impressions:'10',costMicros:'100'}}]});};return {queries,reader:createSearchReader({accountId:account,token:async()=>'test-token',fetcher,now:()=>now,...(researchOnly?{researchOnly:true,lookbackDays:30}:{})})};
 }
 test('Google reader uses only verified read operations and supported date-time fields',async()=>{const f=readerFixture(),r=await f.reader.collect();assert.equal(f.queries.length,4);assert.equal(r.terms.length,1);assert.equal(r.termsCollected,true);assert.equal(r.windowStart,'2026-10-11');});
 test('no search-term fetch outside enabled campaign working time',async()=>{const f=readerFixture(true),r=await f.reader.collect();assert.equal(f.queries.length,3);assert.equal(r.termsCollected,false);assert.equal(r.terms.length,0);});
+test('explicit bulk research reads 30 days even outside serving hours without changing campaigns',async()=>{const f=readerFixture(true,false,true),r=await f.reader.collect();assert.equal(f.queries.length,4);assert.equal(r.windowStart,'2026-09-18');assert.equal(r.windowEnd,'2026-10-17');assert.equal(r.termsCollected,true);});
 test('provider failure is not success and does not expose response text',async()=>{await assert.rejects(readerFixture(false,true).reader.collect(),e=>{assert.doesNotMatch(String(e),/DO_NOT_LEAK_TOKEN/);return true;});});
