@@ -5,7 +5,6 @@ import {connectionToken} from '../connections';
 import {controlStore} from '../ads-control/store';
 import {ControlProviderError,isGoogleQuotaError} from '../ads-control/google';
 import {lowRequestAdsRead} from '../ads-read-server';
-import {adsReadWait} from '../ads-web-mode';
 import {digest} from '../ai-ads/inventory';
 import {createSearchReader} from '../ai-ads/search-reader';
 import type {SearchReport} from '../ai-ads/search-growth';
@@ -19,8 +18,6 @@ export async function bulkKeywordReport():Promise<SearchReport|null>{
  if(r.error)throw new IntegrationError('Saved keyword report unavailable.',503);return r.data?.details as SearchReport??null;
 }
 export async function collectBulkKeywords(actor:string){
- const saved=await bulkKeywordReport(),stamp=Date.parse(saved?.fetchedAt??'');
- if(saved&&Date.now()-stamp>=0&&Date.now()-stamp<6*3600000)return saved;
  return lowRequestAdsRead(agentAccount(),'search',async()=>{
   const report=await createSearchReader({accountId:agentAccount(),lookbackDays:30,researchOnly:true,token:async()=>(await connectionToken('google_ads_management')).token,loginCustomerId:process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID,developerToken:process.env.GOOGLE_ADS_DEVELOPER_TOKEN}).collect();
   if(Buffer.byteLength(JSON.stringify(report))>2000000)throw new IntegrationError('Keyword report is too large. No incomplete report was saved.',503);
@@ -45,9 +42,9 @@ export async function saveBulkGroup(actor:string,input:BulkSelection,campaignId:
 export async function publishBulkGroup(actor:string,id:string,hash:string,confirmed:boolean){
  const db=service(),account=agentAccount(),locks=controlStore(db),google=bulkGoogle({account,token:async()=>(await connectionToken('google_ads_management')).token,loginCustomerId:process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID,developerToken:process.env.GOOGLE_ADS_DEVELOPER_TOKEN});
  const guard=async()=>{
-  const config=await locks.settings(account);if(config.global_paused)throw new IntegrationError('Account controls are globally paused. Review Account controls before submitting.',409);
-  const r=await db.from('ga_audit').select('id,action,created_at').eq('entity','google_ads_read_gate').eq('record_id',account).in('action',['quota','owner_reset']).gte('created_at',new Date(Date.now()-48*3600000).toISOString()).order('id',{ascending:false}).limit(100);if(r.error)throw storage();
-  if(adsReadWait('resources',r.data??[]))throw new IntegrationError('Google quota cooldown is active. No submission was sent.',429);
+  // This owner-confirmed create-only workflow uploads PAUSED groups. It cannot
+  // resume automatic control or enable spending, even when automation is paused.
+  await locks.settings(account);
  };
  try{return await submitBulkGroup({actor,hash,confirmed,guard,google,uncertain:e=>e instanceof ControlProviderError&&e.uncertain,errorCode:e=>e instanceof ControlProviderError?[e.code,...e.diagnostics].join(':').slice(0,250):'bulk_validation_failed',quota:async e=>{if(isGoogleQuotaError(e)){const r=await db.from('ga_audit').insert({actor,action:'quota',entity:'google_ads_read_gate',record_id:account,details:{source:'manual_bulk_submission'}});if(r.error)throw storage();}},store:{
   lock:()=>locks.lock(account),unlock:t=>locks.unlock(account,t),fence:t=>locks.fence(account,t),

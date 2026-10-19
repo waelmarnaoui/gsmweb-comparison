@@ -103,6 +103,6 @@ test('failed reads never renew cached policy evidence; quota failure stops the t
  const g=fixture();g.google.create=async(_,validate)=>{if(!validate)throw new ControlProviderError('google_publication_rejected',true,['RESOURCE_EXHAUSTED'],429);return 'validation';};
  await assert.rejects(g.engine.create(g.get()),ControlProviderError);assert.equal(g.get().state,'uncertain');assert.equal(g.get().pending_operation,'create');
 });
-test('quota cooldown survives invocations and expires without claiming to know Google reset time',()=>{
- assert.equal(quotaWait('google_ads_quota_cooldown',stamp,now),900);assert.equal(quotaWait('google_ads_quota_cooldown',stamp,now+900000),0);assert.equal(quotaWait('publication_tick_incomplete',stamp,now),0);assert.equal(quotaWait('google_ads_quota_cooldown','invalid',now),0);
+test('legacy publishing quota records no longer impose a site cooldown',()=>{
+ assert.equal(quotaWait('google_ads_quota_cooldown',stamp,now),0);assert.equal(quotaWait('google_ads_quota_cooldown',stamp,now+1),0);assert.equal(quotaWait('publication_tick_incomplete',stamp,now),0);assert.equal(quotaWait('google_ads_quota_cooldown','invalid',now),0);
 });
