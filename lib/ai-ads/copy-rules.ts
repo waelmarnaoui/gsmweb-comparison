@@ -1,5 +1,5 @@
 export const AD_PART_TYPES=['display','battery','charging-port'] as const;
-export const COPY_RULES_VERSION='major-parts-15-model-dki-disclosure-v3';
+export const COPY_RULES_VERSION='major-parts-15-replacement-exact-v4';
 export type AdPartType=typeof AD_PART_TYPES[number];
 export function advertisingPartType(value:unknown):AdPartType|null{
  const normalized=typeof value==='string'?value.trim().toLowerCase():'';return AD_PART_TYPES.includes(normalized as AdPartType)?normalized as AdPartType:null;
@@ -28,6 +28,10 @@ export function modelPartHeadline(kind:string,model:string){
  return null;
 }
 export function safeKeyword(text:string){return !!text&&!restrictedCopy(text)&&!/[{}\u0000-\u001f]/.test(text)&&Array.from(text).length<=80&&text.split(/\s+/).length<=10;}
+export function replacementKeyword(text:string){
+ const words=text.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ');
+ return safeKeyword(text)&&/\b(inlocuire|schimbare)\b/.test(words)&&!(/\b(vand|vanzare|cumpar|cumparare|depozit)\b/.test(words));
+}
 export function insertionPreview(headline:string,keyword:string){
  if(!validHeadline(headline)||!safeKeyword(keyword))throw new Error('Keyword insertion requires reviewed, unrestricted copy and keywords.');
  const inserted=headline.replace(/\{KeyWord:([^{}:]+)\}/g,keyword);

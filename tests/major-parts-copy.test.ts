@@ -31,7 +31,8 @@ test('every display variant keeps iPhone 15 Pro Max inside keyword-insertion bra
   assert.equal(variant.headlines.length,15);assert.ok(variant.headlines.every(validHeadline));
   assert.equal(insertionPreview(variant.headlines[0],'inlocuire display iPhone 15 Pro Max'),'Display iPhone 15 Pro Max');
  }
- assert.ok(draft.keywords.some(k=>k.text==='display iPhone 15 Pro Max'));
+ assert.ok(draft.keywords.some(k=>k.text==='inlocuire display iPhone 15 Pro Max'));
+ assert.ok(draft.keywords.every(k=>k.matchType==='EXACT'&&/^(inlocuire|schimbare) /.test(k.text)));
  assert.notEqual(COPY_RULES_VERSION,'major-parts-15-full-dki-disclosure-v2');
 });
 
