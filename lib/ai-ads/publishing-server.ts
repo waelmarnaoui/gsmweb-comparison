@@ -15,13 +15,11 @@ import {createPublicationEngine,type PublicationRow} from './publishing-engine';
 import {policyOnlyIntervention} from './intervention-server';
 import {feedbackFresh} from './intervention-policy';
 import {isGoogleQuotaError} from '../ads-control/google';
-import {quotaWait} from './quota-policy';
 import {ADS_WEB_ONLY} from '../ads-web-mode';
 import {webAdsResources} from '../ads-web-server';
 const storage=()=>new IntegrationError('Automatic publishing storage is unavailable. Install the reviewed AUTO-PUBLISH-PROPOSED.sql in the attribution database.',503);
 export async function publishingQuotaWait(){
- const r=await service().from('ga_ads_control').select('auto_publish_error,auto_publish_checked_at').eq('account_id',agentAccount()).single();
- if(r.error)throw storage();return quotaWait(r.data.auto_publish_error,r.data.auto_publish_checked_at);
+ return 0;
 }
 export async function recordPublishingQuota(){
  const r=await service().from('ga_ads_control').update({auto_publish_checked_at:new Date().toISOString(),auto_publish_error:'google_ads_quota_cooldown'}).eq('account_id',agentAccount());if(r.error)throw storage();

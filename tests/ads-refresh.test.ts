@@ -16,15 +16,13 @@ test('concurrent stale readers share one read-only collection',async()=>{
  const a=refresh('account',async()=>null,collect,now),b=refresh('account',async()=>null,collect,now);release();
  assert.deepEqual(await a,{refreshError:null});assert.deepEqual(await b,{refreshError:null});assert.equal(calls,1);
 });
-test('API failure remains visible, redacts provider details and backs off for a minute',async()=>{
+test('API failure remains visible, redacts provider details and permits immediate manual retry',async()=>{
  let calls=0;const refresh=createAdsRefreshGate(),collect=async()=>{calls++;throw new Error('sensitive provider response');};
  assert.match((await refresh('account',async()=>null,collect,now)).refreshError!,/collection failed/);
- await refresh('account',async()=>null,collect,now+59000);assert.equal(calls,1);
- const result=await refresh('account',async()=>null,collect,now+60000);assert.equal(calls,2);assert.ok(!result.refreshError!.includes('sensitive'));
+ const result=await refresh('account',async()=>null,collect,now+1);assert.equal(calls,2);assert.ok(!result.refreshError!.includes('sensitive'));
 });
-test('quota responses retain a safe classification and stop report retries for fifteen minutes',async()=>{
+test('quota responses retain a safe classification without a site cooldown',async()=>{
  let calls=0;const refresh=createAdsRefreshGate(),collect=async()=>{calls++;throw new AdsReportingError(429);};
  assert.equal((await refresh('account',async()=>null,collect,now)).quotaLimited,true);
- assert.equal((await refresh('account',async()=>null,collect,now+899999)).quotaLimited,true);assert.equal(calls,1);
- await refresh('account',async()=>null,collect,now+900000);assert.equal(calls,2);
+ assert.equal(calls,1);assert.equal((await refresh('account',async()=>null,collect,now+1)).quotaLimited,true);assert.equal(calls,2);
 });

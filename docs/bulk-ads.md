@@ -4,12 +4,12 @@ Create Ads defaults to the bulk builder; the previous stock/search opportunities
 
 ## Setup
 
-Review `supabase/BULK-ADS-PROPOSED.sql` and obtain approval before installing it in the attribution database. It creates one server-only app table and an audit trigger; no CRM schema/data changes. No new OAuth secrets are required: manual submissions use the existing Google Ads management connection. Global account pause and quota protection remain enforced.
+Review `supabase/BULK-ADS-PROPOSED.sql` and obtain approval before installing it in the attribution database. It creates one server-only app table and an audit trigger; no CRM schema/data changes. No new OAuth secrets are required: manual submissions use the existing Google Ads management connection. Automatic account control remains paused. Owner-confirmed manual uploads are a separate create-only workflow for new PAUSED groups and never enable spending.
 
 ## Keywords
 
 - Load 30-day searches explicitly; no Google requests on page load. Research can read past searches outside campaign serving hours without authorizing changes. Normal stock/search scheduling is unchanged.
-- One account-wide, bounded report is cached for six hours in the existing audit store. The existing quota gate stops repeated reads. Only this account's disclosed search terms are available; this is not a Keyword Planner search-volume study or a market-wide ranking. Google can omit terms for privacy.
+- One account-wide, bounded report is saved in the existing audit store. Each explicit Load searches request can collect a new report; no application cooldown is enforced. Only this account's disclosed search terms are available; this is not a Keyword Planner search-volume study or a market-wide ranking. Google can omit terms for privacy. Google API limits still apply; rejected requests are not automatically retried.
 - Rank observed terms by clicks and impressions. Retain the evidence window, exact term and metrics. Ambiguous models, wrong services, sensitive data, DIY and screen protectors are excluded. Glass and full-display intent remain separate.
 - Unobserved model suggestions are opt-in and clearly identified. Without this opt-in, models with no observed keywords are uncovered, not silently given invented search evidence.
 - Every keyword is EXACT. Stored keywords and all three ads enter the SAME new group in one atomic Google mutation. No broad/phrase path exists.

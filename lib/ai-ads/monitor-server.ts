@@ -19,19 +19,17 @@ export async function readStockMonitor(){
  return {...stockMonitorState(latest.data as StockMonitorRun|null,good.data as StockMonitorRun|null),lastAttemptAt:latest.data?.created_at??null,source:await inventorySourceStatus(),diagnostic};
 }
 let active:Promise<Awaited<ReturnType<typeof readStockMonitor>>>|null=null;
-let retryAfter=0;
 export async function collectStockMonitor(initiatedBy:string|null=null){
  if(active)return active;
  active=(async()=>{
   const before=await readStockMonitor();
-  if((before.reliable&&stockSnapshotFresh(before.snapshot))||Date.now()<retryAfter)return before;
+  if(before.reliable&&stockSnapshotFresh(before.snapshot))return before;
   const id=account(),db=service();
   let snapshot;
   try{
    const inventory=await readRepairInventory();snapshot=buildStockSnapshot(inventory,before.snapshot);
    if(Buffer.byteLength(JSON.stringify(snapshot),'utf8')>6_000_000)throw new Error('Snapshot size limit.');
   }catch(cause){
-   retryAfter=Date.now()+60000;
    const slot=new Date(Math.floor(Date.now()/300000)*300000).toISOString();
    const {error,data}=await db.from('ga_stock_monitor_runs').upsert({account_id:id,source_project:inventoryProjectRef,slot,status:'failed',snapshot:null,error_code:'inventory_read_failed',initiated_by:initiatedBy},{onConflict:'account_id,source_project,slot,status',ignoreDuplicates:true}).select('id');
    if(error)throw storageError();
@@ -44,7 +42,7 @@ export async function collectStockMonitor(initiatedBy:string|null=null){
   const slot=new Date(Math.floor(Date.parse(snapshot.observedAt)/300000)*300000).toISOString();
   const {error}=await db.from('ga_stock_monitor_runs').upsert({account_id:id,source_project:inventoryProjectRef,slot,status:'complete',snapshot,error_code:null,initiated_by:initiatedBy},{onConflict:'account_id,source_project,slot,status',ignoreDuplicates:true});
   if(error)throw storageError();
-  retryAfter=0;return readStockMonitor();
+  return readStockMonitor();
  })();
  try{return await active;}finally{active=null;}
 }

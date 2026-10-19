@@ -15,9 +15,8 @@ export async function lowRequestAdsRead<T>(account:string,kind:AdsReadKind,colle
  },collect,e=>isGoogleQuotaError(e)||e instanceof AdsReportingError&&e.httpStatus===429);}
  catch(error){
   const message=error instanceof Error?error.message:'';
-  if(message.startsWith('ads_read_wait:'))throw new IntegrationError('Google check skipped to conserve quota. Try after '+new Date(Date.now()+Number(message.split(':')[1])*1000).toISOString()+'. Saved results remain available.',429);
   if(message==='ads_read_busy')throw new IntegrationError('Another account check is running. Use saved results and try later.',409);
-  if(isGoogleQuotaError(error)||error instanceof AdsReportingError&&error.httpStatus===429)throw new IntegrationError('Google Ads API quota limit. Further checks are paused for 24 hours. This is an application cooldown, not Google\'s reset time.',429);
+  if(isGoogleQuotaError(error)||error instanceof AdsReportingError&&error.httpStatus===429)throw new IntegrationError('Google rejected this request because of its API quota. No site cooldown or automatic retry was started. You may retry manually.',429);
   throw error;
  }
 }
