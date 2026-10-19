@@ -1,6 +1,6 @@
 import {digest,inventorySafeguard,type InventoryPart} from './inventory';
 import {generateRepairDraft,type RepairDraft} from './policy';
-import {COPY_RULES_VERSION,validHeadline,safeKeyword} from './copy-rules';
+import {COPY_RULES_VERSION,validHeadline,safeKeyword,advertisingPartLabel,modelPartHeadline} from './copy-rules';
 import {campaignOpen,type Opportunity,type SearchReport} from './search-growth';
 export type PublicationPlan={key:string;account:string;campaignId:string;groupName:string;model:string;partType:string;productId:string;stock:InventoryPart;draft:RepairDraft;keywords:string[];manualCpcMicros:string|null;copyRulesVersion:string;createdAt:string;correction?:{parentId:string;attempt:1;topics:string[]}};
 export function publicationStockProblem(plan:PublicationPlan,part:InventoryPart|null,now=Date.now()){
@@ -21,6 +21,8 @@ export function makePublicationPlan(o:Opportunity,part:InventoryPart,report:Sear
  if(!/^\d{10}$/.test(report.accountId)||!/^\d{1,20}$/.test(o.campaignId)||part.id!==o.productId||part.partType!==o.partType||!part.models.includes(o.model)||!part.eligible||part.available===null||part.available<part.minimumStock)throw new Error('stock_unavailable');
  if(!report.terms.some(t=>t.campaignId===o.campaignId&&t.adGroupId===o.adGroupId&&o.observedTerms.includes(t.term)&&t.impressions>0))throw new Error('search_evidence_missing');
  const draft=generateRepairDraft({...part,models:[o.model]},'https://gsmweb.site/',now);
+ const modelHeadline=modelPartHeadline(advertisingPartLabel(part.partType)!,o.model);
+ if(!modelHeadline||!draft.variants?.every(v=>v.headlines.includes(`{KeyWord:${modelHeadline}}`)))throw new Error('model_keyword_headline_missing');
  if(draft.headlines.length!==15||!draft.headlines.every(validHeadline)||draft.descriptions.length!==4||!draft.pinnedHeadlines?.some(h=>h.field==='HEADLINE_1'&&h.text==='Cu Montaj In Magazin')||!draft.pinnedDescriptions?.some(d=>d.field==='DESCRIPTION_1'&&/numai cu montaj.*Nu se vinde separat/.test(d.text)))throw new Error('truthful_disclosure_missing');
  const key=digest({account:report.accountId,campaign:o.campaignId,model:o.model,partType:part.partType});
  const family=/\biphone\b/i.test(o.model)?'iPhone':'Phone',category={battery:'Batteries',display:'Displays','charging-port':'Charging Ports'}[part.partType!];if(!category)throw new Error('part_type_unsupported');

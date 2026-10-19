@@ -1,5 +1,5 @@
 import {digest,type InventoryPart} from './inventory';
-import {advertisingPartLabel,validHeadline,headlineFallback,restrictedCopy} from './copy-rules';
+import {advertisingPartLabel,validHeadline,headlineFallback,restrictedCopy,modelPartHeadline} from './copy-rules';
 export const MAX_COPY_VARIANTS=3;
 export type CopyVariant={id:string;label:string;headlines:string[];descriptions:string[];inventoryFingerprint:string;googleReview:'NOT_SUBMITTED';pinnedHeadlines:{text:string;field:'HEADLINE_1'}[];pinnedDescriptions:{text:string;field:'DESCRIPTION_1'}[];};
 const fit=(text:string,max:number)=>Array.from(text).length<=max?text:null;
@@ -8,7 +8,8 @@ export function prepareCopyVariants(part:InventoryPart):CopyVariant[]{
  const kind=advertisingPartLabel(part.partType);if(!kind)throw new Error('Only displays, batteries and charging ports may generate ads.');
  const model=part.models[0];
  // The complete default headline is inside the official insertion syntax.
- const dynamic=[`{KeyWord:${kind}}`,'{KeyWord:GSMWEB Drumul Taberei}',`{KeyWord:${kind} Sector 6}`];
+ const modelHeadline=modelPartHeadline(kind,model);
+ const dynamic=[`{KeyWord:${modelHeadline??kind}}`,'{KeyWord:GSMWEB Drumul Taberei}',`{KeyWord:${kind} Sector 6}`];
  const installation=['Cu Montaj In Magazin',`Montaj ${kind}`];
  const common=[fit(`${kind} ${model}`,30),`${kind} La GSMWEB`,`${kind} In Sector 6`,`${kind} Drumul Taberei`,'Drumul Taberei Nr 138','GSMWEB Drumul Taberei','Discuta Cu Echipa GSMWEB','Contacteaza GSMWEB','GSMWEB In Sector 6','Detalii La GSMWEB','Viziteaza GSMWEB','GSMWEB Bucuresti','Verifica Modelul Cu Echipa','Drumul Taberei Sector 6'];
  const disclosure='Piesa se furnizeaza numai cu montaj in magazin. Nu se vinde separat.';

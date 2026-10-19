@@ -27,6 +27,19 @@ test('new ads are Enabled while their new model-specific groups start Paused; no
 test('fresh stock, verified search evidence, compatibility and campaign hours are mandatory',()=>{
  assert.throws(()=>makePublicationPlan(opportunity,{...part,eligible:false},report,'MANUAL_CPC',now));assert.throws(()=>makePublicationPlan(opportunity,part,{...report,terms:[]},'MANUAL_CPC',now));assert.throws(()=>makePublicationPlan(opportunity,part,{...report,fetchedAt:new Date(now-300001).toISOString()},'MANUAL_CPC',now));assert.equal(publicationStockProblem(plan,{...part,available:0,eligible:false},now),'stock_unavailable');assert.equal(publicationStockProblem(plan,{...part,quality:'used'},now),'stock_details_changed');assert.equal(publicationStockProblem(plan,{...part,available:2,fingerprint:'changed'},now),null);
 });
+
+test('publication keeps the selected 15 Pro Max display model and the braces in Google assets',()=>{
+ const display={...part,partType:'display',models:['iPhone 14','iPhone 15 Pro Max']};
+ const search={...report,terms:[{...report.terms[0],term:'display iphone 15 pro max'}]};
+ const match=prepareSearchOpportunities(search,[display],now)[0];assert.equal(match.model,'iPhone 15 Pro Max');
+ const selected=makePublicationPlan(match,display,search,'MANUAL_CPC',now);
+ const assets=(creationOperations(selected).at(-1) as any).adGroupAdOperation.create.ad.responsiveSearchAd.headlines;
+ assert.ok(assets.some((h:any)=>h.text==='{KeyWord:Display iPhone 15 Pro Max}'));
+ assert.ok(selected.keywords.every(k=>k.includes('iPhone 15 Pro Max')));
+ assert.ok(!assets.some((h:any)=>h.text.includes('iPhone 14')));
+ const longModel='Unusually Long Manufacturer Phone 2026 Pro Max Ultra';
+ assert.throws(()=>makePublicationPlan({...opportunity,model:longModel},{...part,models:[longModel]},report,'MANUAL_CPC',now),/model_keyword_headline_missing/);
+});
 test('actual prior-day allowance and dated RON spend guard activation; missing is not zero',()=>{
  const context={accountId:account,businessDate:'2026-10-17',allowance:{ready:true,allowanceBani:15000},ronObservation:{accountId:account,currency:'RON',fetchedAt:stamp,today:{date:'2026-10-17',costMicros:'58590000'}}};assert.equal(publicationSpendProblem(context,account,now),null);assert.equal(publicationSpendProblem({...context,allowance:{ready:false,allowanceBani:null}},account,now),'daily_allowance_unavailable');assert.equal(publicationSpendProblem({...context,ronObservation:{...context.ronObservation,today:{...context.ronObservation.today,costMicros:'150000000'}}},account,now),'daily_allowance_reached');assert.equal(publicationSpendProblem({...context,ronObservation:null},account,now),'spend_unverified');
 });

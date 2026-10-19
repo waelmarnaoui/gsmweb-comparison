@@ -1,6 +1,6 @@
 import {digest,type InventoryPart} from './inventory';
 import {prepareCopyVariants,type CopyVariant} from './variants';
-import {advertisingPartLabel,safeKeyword} from './copy-rules';
+import {advertisingPartLabel,safeKeyword,modelPartHeadline} from './copy-rules';
 export const POLICY_VERSION='gsmweb-repair-2026-10-16';
 export const POLICY_CHECKED_AT='2026-10-16T11:08:48.000Z';
 export const policySources=[
@@ -18,6 +18,7 @@ export function generateRepairDraft(part:InventoryPart,landingUrl:string|null,no
  if(!part.eligible)throw new Error('Only stock-qualified inventory can generate an internal draft.');
  const issues:PolicyIssue[]=[{code:'third_party_consumer_repair',risk:'high',explanation:'The stated offer is third-party consumer phone hardware repair, explicitly included in Google’s restricted technical-support policy. A physical shop does not establish an exception.',correction:'Do not publish. Obtain policy clarification from Google for the actual business offer; do not disguise repair services as parts sales.',source:policySources[0].url}];
  const variants=prepareCopyVariants(part),headlines=variants[0].headlines,descriptions=variants[0].descriptions,kind=advertisingPartLabel(part.partType)!;
+ if(!modelPartHeadline(kind,part.models[0]))issues.push({code:'model_headline_too_long',risk:'high',explanation:'The complete model and part cannot fit a headline without losing model identity.',correction:'Review the recorded model label. Do not remove Pro, Max, Plus, Ultra, FE or generation information to shorten it.',source:policySources[3].url});
  const raw=part.models.slice(0,8).flatMap(model=>[
   {text:compact(`inlocuire ${kind.toLowerCase()} ${model}`),matchType:'EXACT' as const,basis:'canonical part type and verified compatible model from the inventory database'},
   {text:compact(`schimbare ${kind.toLowerCase()} ${model}`),matchType:'PHRASE' as const,basis:'canonical part type and verified compatible model from the inventory database'},
