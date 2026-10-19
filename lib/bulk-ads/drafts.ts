@@ -1,6 +1,6 @@
 import {z} from 'zod';
 import {BULK_FAMILIES,BULK_SERVICES,BULK_COPY_VERSION,type BulkFamily,type BulkService} from './catalog';
-import {validHeadline,headlineFallback,safeKeyword,restrictedCopy} from '../ai-ads/copy-rules';
+import {validHeadline,headlineFallback,replacementKeyword,restrictedCopy} from '../ai-ads/copy-rules';
 import type {SearchReport} from '../ai-ads/search-growth';
 import {safeSearchTerm} from '../ai-ads/search-terms';
 export const bulkSelectionSchema=z.object({service:z.enum(BULK_SERVICES.map(s=>s.id)),family:z.enum(BULK_FAMILIES.map(f=>f.id)),models:z.array(z.string().max(80)).min(1).max(50),includeSuggestions:z.boolean().default(false)}).strict();
@@ -37,18 +37,18 @@ export function prepareBulkDraft(raw:BulkSelection,report:SearchReport|null):Bul
  selection.models=[...selection.models].sort((a,b)=>(family.models as readonly string[]).indexOf(a)-(family.models as readonly string[]).indexOf(b));
  const terms=new Map<string,BulkKeyword>();
  if(report?.complete&&report.termsCollected){for(const row of report.terms){
-  if(serviceIntent(row.term)!==selection.service||!safeKeyword(row.term)||row.impressions<1)continue;
+  if(serviceIntent(row.term)!==selection.service||!replacementKeyword(row.term)||row.impressions<1)continue;
   const model=observedModel(row.term);if(!model||!selection.models.includes(model))continue;
   const key=norm(row.term),old=terms.get(key);if(old){old.clicks+=row.clicks;old.impressions+=row.impressions;}else terms.set(key,{text:row.term,model,matchType:'EXACT',source:'google_search',clicks:row.clicks,impressions:row.impressions});
  }}
  const keywords=[...terms.values()].sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions||a.text.localeCompare(b.text)).slice(0,100);
- if(selection.includeSuggestions){for(const model of selection.models){if(keywords.some(k=>k.model===model))continue;const text=`${service.keyword} ${model}`;if(safeKeyword(text)&&keywords.length<100)keywords.push({text,model,matchType:'EXACT',source:'suggestion',clicks:0,impressions:0});}}
+ if(selection.includeSuggestions){for(const model of selection.models){if(keywords.some(k=>k.model===model))continue;for(const verb of ['inlocuire','schimbare']){const text=`${verb} ${service.keyword} ${model}`;if(replacementKeyword(text)&&keywords.length<100)keywords.push({text,model,matchType:'EXACT',source:'suggestion',clicks:0,impressions:0});}}}
  const covered=selection.models.filter(m=>keywords.some(k=>k.model===m));
  // All ads in a family group share all keywords. If a keyword is too long for
  // insertion, a model-specific default could show the wrong model. Use the
  // family default in that case; retain the full exact term in the group.
- const modelLines=keywords.every(k=>Array.from(k.text).length<=30)?covered.map(m=>bulkModelHeadline(service.part,m)).filter((h):h is string=>!!h):[];
- const familyFallback=[`${service.part} ${family.label}`,`${service.part} GSMWEB`].find(validHeadline)!;
+ const modelLines=keywords.every(k=>Array.from(k.text).length<=30)?covered.map(m=>bulkModelHeadline(`Inlocuire ${service.part}`,m)).filter((h):h is string=>!!h):[];
+ const familyFallback=[`Inlocuire ${service.part} ${family.label}`,`Schimbare ${service.part} GSMWEB`,`Inlocuire ${service.part}`].find(validHeadline)!;
  const disclosure=selection.service==='glass'?'Schimbam doar sticla daca panoul si functia tactila permit pastrarea displayului.':'Piesa se furnizeaza numai cu montaj in magazin. Nu se vinde separat.';
  const specific=selection.service==='glass'?'Alternativa la display complet. Costul si eligibilitatea se confirma dupa verificare.':selection.service==='camera'?'Inlocuire modul camera, dupa verificarea modelului si a compatibilitatii.':`${service.part} pentru ${family.label}. Confirma modelul si disponibilitatea cu echipa.`;
  const descriptions=[disclosure,specific,'GSMWEB, Drumul Taberei 138, Sector 6. Discuta cu echipa despre telefonul tau.','Solicita detalii despre montaj si compatibilitate. Oferta se confirma in magazin.'];
@@ -64,7 +64,7 @@ export function prepareBulkDraft(raw:BulkSelection,report:SearchReport|null):Bul
 }
 export function assertBulkDraft(draft:BulkDraft){
  if(draft.version!==BULK_COPY_VERSION||draft.ads.length<1||draft.ads.length>3||!draft.keywords.length||draft.keywords.length>100||draft.landingUrl!=='https://gsmweb.site/')throw new Error('Review current ads and keywords before publishing.');
- if(draft.keywords.some(k=>k.matchType!=='EXACT'||!safeKeyword(k.text)||!draft.selection.models.includes(k.model)))throw new Error('Only exact model-specific keywords are allowed.');
+ if(draft.keywords.some(k=>k.matchType!=='EXACT'||!replacementKeyword(k.text)||!draft.selection.models.includes(k.model)))throw new Error('Every EXACT keyword must include inlocuire or schimbare. Product-only keywords are not allowed.');
  if(draft.ads.some(a=>a.headlines.length!==15||!a.headlines.every(validHeadline)||!a.headlines.includes('Cu Montaj In Magazin')||a.descriptions.length!==4||a.descriptions.some(d=>Array.from(d).length>90||restrictedCopy(d))))throw new Error('Invalid ad assets.');
 }
 export function bulkCreateOperations(account:string,campaignId:string,draft:BulkDraft,strategy:string,cpcMicros:string|null=null){

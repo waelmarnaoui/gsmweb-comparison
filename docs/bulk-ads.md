@@ -8,6 +8,10 @@ Review `supabase/BULK-ADS-PROPOSED.sql` and obtain approval before installing it
 
 ## Keywords
 
+Every published keyword must be EXACT and include `inlocuire` or `schimbare` as a complete word (case/diacritics-insensitive). Product-only terms, `montaj`-only terms and explicit sales intent are excluded even if Google reported many clicks. Both observed filtering and final Google payload construction enforce this rule. Opt-in suggestions use both replacement verbs; they are never presented as observed queries. DKI defaults describe replacement service, not loose-part sales.
+
+Saved drafts with earlier copy versions cannot publish. Use **Update replacement keywords**, then review and approve the new saved preview. This updates only unsubmitted app drafts, not existing Google groups or uncertain/submitted records.
+
 - Load 30-day searches explicitly; no Google requests on page load. Research can read past searches outside campaign serving hours without authorizing changes. Normal stock/search scheduling is unchanged.
 - One account-wide, bounded report is saved in the existing audit store. Each explicit Load searches request can collect a new report; no application cooldown is enforced. Only this account's disclosed search terms are available; this is not a Keyword Planner search-volume study or a market-wide ranking. Google can omit terms for privacy. Google API limits still apply; rejected requests are not automatically retried.
 - Rank observed terms by clicks and impressions. Retain the evidence window, exact term and metrics. Ambiguous models, wrong services, sensitive data, DIY and screen protectors are excluded. Glass and full-display intent remain separate.

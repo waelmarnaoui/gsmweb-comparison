@@ -1,6 +1,6 @@
 import {digest,inventorySafeguard,type InventoryPart} from './inventory';
 import {generateRepairDraft,type RepairDraft} from './policy';
-import {COPY_RULES_VERSION,validHeadline,safeKeyword,advertisingPartLabel,modelPartHeadline} from './copy-rules';
+import {COPY_RULES_VERSION,validHeadline,replacementKeyword,advertisingPartLabel,modelPartHeadline} from './copy-rules';
 import {campaignOpen,type Opportunity,type SearchReport} from './search-growth';
 export type PublicationPlan={key:string;account:string;campaignId:string;groupName:string;model:string;partType:string;productId:string;stock:InventoryPart;draft:RepairDraft;keywords:string[];manualCpcMicros:string|null;copyRulesVersion:string;createdAt:string;correction?:{parentId:string;attempt:1;topics:string[]}};
 export function publicationStockProblem(plan:PublicationPlan,part:InventoryPart|null,now=Date.now()){
@@ -26,7 +26,7 @@ export function makePublicationPlan(o:Opportunity,part:InventoryPart,report:Sear
  if(draft.headlines.length!==15||!draft.headlines.every(validHeadline)||draft.descriptions.length!==4||!draft.pinnedHeadlines?.some(h=>h.field==='HEADLINE_1'&&h.text==='Cu Montaj In Magazin')||!draft.pinnedDescriptions?.some(d=>d.field==='DESCRIPTION_1'&&/numai cu montaj.*Nu se vinde separat/.test(d.text)))throw new Error('truthful_disclosure_missing');
  const key=digest({account:report.accountId,campaign:o.campaignId,model:o.model,partType:part.partType});
  const family=/\biphone\b/i.test(o.model)?'iPhone':'Phone',category={battery:'Batteries',display:'Displays','charging-port':'Charging Ports'}[part.partType!];if(!category)throw new Error('part_type_unsupported');
- const keywords=[...new Set(draft.keywords.filter(k=>k.matchType==='EXACT'&&safeKeyword(k.text)).map(k=>k.text))].slice(0,2);if(!keywords.length)throw new Error('keywords_missing');
+ const keywords=[...new Set(draft.keywords.filter(k=>k.matchType==='EXACT'&&replacementKeyword(k.text)).map(k=>k.text))].slice(0,2);if(!keywords.length)throw new Error('keywords_missing');
  const plan:PublicationPlan={key,account:report.accountId,campaignId:o.campaignId,groupName:`${family} ${category} | ${o.model} | GSMWEB-AI-${key.slice(0,12)}`.slice(0,255),model:o.model,partType:part.partType!,productId:part.id,stock:part,draft,keywords,manualCpcMicros:strategy==='MANUAL_CPC'?(report.currency==='USD'?'632911':report.currency==='RON'?'3000000':null):null,copyRulesVersion:COPY_RULES_VERSION,createdAt:new Date(now).toISOString()};
  if(strategy==='MANUAL_CPC'&&!plan.manualCpcMicros)throw new Error('bid_currency_unsupported');
  const problem=publicationStockProblem(plan,part,now);if(problem)throw new Error(problem);return plan;
@@ -34,6 +34,7 @@ export function makePublicationPlan(o:Opportunity,part:InventoryPart,report:Sear
 export type PublicationFeedback={groupResource:string;adResource:string;groupStatus:string;adStatus:string;approval:string;review:string;topics:{topic:string;type:string}[];observedAt?:string};
 export function googleCleared(f:PublicationFeedback){return f.adStatus==='ENABLED'&&f.approval==='APPROVED'&&f.review==='REVIEWED'&&f.topics.length===0;}
 export function creationOperations(p:PublicationPlan){
+ if(p.copyRulesVersion!==COPY_RULES_VERSION||!p.keywords.length||p.keywords.some(k=>!replacementKeyword(k)))throw new Error('Review replacement-intent EXACT keywords before submission.');
  const group=`customers/${p.account}/adGroups/-1`;
  return [{adGroupOperation:{create:{resourceName:group,campaign:`customers/${p.account}/campaigns/${p.campaignId}`,name:p.groupName,status:'PAUSED',type:'SEARCH_STANDARD',...(p.manualCpcMicros?{cpcBidMicros:p.manualCpcMicros}:{})}}},
  ...p.keywords.map(text=>({adGroupCriterionOperation:{create:{adGroup:group,status:'ENABLED',keyword:{text,matchType:'EXACT'}}}})),

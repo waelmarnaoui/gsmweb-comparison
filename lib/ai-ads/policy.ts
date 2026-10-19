@@ -1,6 +1,6 @@
 import {digest,type InventoryPart} from './inventory';
 import {prepareCopyVariants,type CopyVariant} from './variants';
-import {advertisingPartLabel,safeKeyword,modelPartHeadline} from './copy-rules';
+import {advertisingPartLabel,replacementKeyword,modelPartHeadline} from './copy-rules';
 export const POLICY_VERSION='gsmweb-repair-2026-10-16';
 export const POLICY_CHECKED_AT='2026-10-16T11:08:48.000Z';
 export const policySources=[
@@ -21,11 +21,9 @@ export function generateRepairDraft(part:InventoryPart,landingUrl:string|null,no
  if(!modelPartHeadline(kind,part.models[0]))issues.push({code:'model_headline_too_long',risk:'high',explanation:'The complete model and part cannot fit a headline without losing model identity.',correction:'Review the recorded model label. Do not remove Pro, Max, Plus, Ultra, FE or generation information to shorten it.',source:policySources[3].url});
  const raw=part.models.slice(0,8).flatMap(model=>[
   {text:compact(`inlocuire ${kind.toLowerCase()} ${model}`),matchType:'EXACT' as const,basis:'canonical part type and verified compatible model from the inventory database'},
-  {text:compact(`schimbare ${kind.toLowerCase()} ${model}`),matchType:'PHRASE' as const,basis:'canonical part type and verified compatible model from the inventory database'},
-  {text:compact(`${kind.toLowerCase()} ${model}`),matchType:'EXACT' as const,basis:'canonical part type and verified compatible model from the inventory database'},
-  {text:compact(`montaj ${kind.toLowerCase()} ${model}`),matchType:'PHRASE' as const,basis:'canonical part type and verified compatible model from the inventory database'}
+  {text:compact(`schimbare ${kind.toLowerCase()} ${model}`),matchType:'EXACT' as const,basis:'canonical part type and verified compatible model from the inventory database'}
  ]);
- const keywords=raw.filter(k=>safeKeyword(k.text)).filter((k,i,all)=>all.findIndex(x=>x.text===k.text&&x.matchType===k.matchType)===i);
+ const keywords=raw.filter(k=>replacementKeyword(k.text)).filter((k,i,all)=>all.findIndex(x=>x.text===k.text&&x.matchType===k.matchType)===i);
  if(!keywords.length)issues.push({code:'keyword_length',risk:'high',explanation:'Verified inventory terms do not fit supported keyword limits.',correction:'Review verified model and part labels before creating keywords.',source:policySources[3].url});
  if(!landingUrl)issues.push({code:'landing_unverified',risk:'high',explanation:'No verified repair-service landing page is configured.',correction:'Provide an accurate public service page, seller identity, address, terms and contact details for review.',source:policySources[2].url});
  else issues.push({code:'destination_review_required',risk:'high',explanation:'The owner supplied a candidate business destination. Its presence does not establish policy clearance or verify each advertised service and claim.',correction:'Review the actual destination, seller details, advertised repair scope and customer terms before submission.',source:policySources[2].url});

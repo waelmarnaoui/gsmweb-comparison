@@ -6,16 +6,16 @@ import {prepareBulkDraft,assertBulkDraft,bulkCreateOperations,observedModel,serv
 import {bulkGoogle} from '../lib/bulk-ads/google';
 import {submitBulkGroup,type BulkRow} from '../lib/bulk-ads/engine';
 import {ControlProviderError} from '../lib/ads-control/google';
-import {validHeadline,headlineFallback} from '../lib/ai-ads/copy-rules';
+import {validHeadline,headlineFallback,replacementKeyword} from '../lib/ai-ads/copy-rules';
 import type {SearchReport} from '../lib/ai-ads/search-growth';
 const account='2050434247',actor='owner';
 function draft(){return prepareBulkDraft({family:'iphone',service:'battery',models:['iPhone 15 Pro Max','iPhone 15'],includeSuggestions:true},null);}
 test('all 45 service/family combinations generate 3 valid ads with exact paired model keywords',()=>{
  for(const service of BULK_SERVICES)for(const family of BULK_FAMILIES){
   const d=prepareBulkDraft({family:family.id,service:service.id,models:[...family.models],includeSuggestions:true},null);assertBulkDraft(d);
-  assert.equal(d.ads.length,3);assert.equal(d.uncoveredModels.length,0);assert.equal(d.keywords.length,family.models.length);assert.equal(new Set(d.ads.map(a=>JSON.stringify(a.headlines))).size,3);
+  assert.equal(d.ads.length,3);assert.equal(d.uncoveredModels.length,0);assert.equal(d.keywords.length,family.models.length*2);assert.equal(new Set(d.ads.map(a=>JSON.stringify(a.headlines))).size,3);
   for(const ad of d.ads){assert.equal(ad.headlines.length,15);assert.ok(ad.headlines.every(validHeadline));assert.equal(new Set(ad.headlines.map(h=>headlineFallback(h).toLowerCase())).size,15);assert.ok(ad.headlines[0].startsWith('{KeyWord:'));assert.ok(ad.descriptions.every(d=>d.length<=90));}
-  assert.ok(d.keywords.every(k=>k.matchType==='EXACT'&&family.models.includes(k.model as never)));
+  assert.ok(d.keywords.every(k=>k.matchType==='EXACT'&&replacementKeyword(k.text)&&family.models.includes(k.model as never)));
  }
 });
 test('no invented search evidence and no S/Pro/Max/A family leakage',()=>{
@@ -26,7 +26,7 @@ test('no invented search evidence and no S/Pro/Max/A family leakage',()=>{
  assert.throws(()=>prepareBulkDraft({...draft().selection,models:['Samsung Galaxy A55']},null));
 });
 test('reported searches are ranked by real clicks, aggregated, and stay paired to the model/service',()=>{
- const terms=[{campaignId:'1',adGroupId:'2',term:'baterie iphone 15 pro max',clicks:3,impressions:20,costMicros:'100'},{campaignId:'1',adGroupId:'3',term:'baterie iphone 15 pro max',clicks:2,impressions:10,costMicros:'100'},{campaignId:'1',adGroupId:'2',term:'display iphone 15',clicks:10,impressions:100,costMicros:'100'}];
+ const terms=[{campaignId:'1',adGroupId:'2',term:'inlocuire baterie iphone 15 pro max',clicks:3,impressions:20,costMicros:'100'},{campaignId:'1',adGroupId:'3',term:'inlocuire baterie iphone 15 pro max',clicks:2,impressions:10,costMicros:'100'},{campaignId:'1',adGroupId:'2',term:'display iphone 15',clicks:10,impressions:100,costMicros:'100'},{campaignId:'1',adGroupId:'2',term:'baterie iphone 15',clicks:100,impressions:1000,costMicros:'100'}];
  const report={complete:true,termsCollected:true,terms,windowStart:'2026-09-20',windowEnd:'2026-10-19',fetchedAt:'2026-10-19T08:00:00Z'} as SearchReport;
  const d=prepareBulkDraft({...draft().selection,includeSuggestions:false},report);assert.equal(d.keywords.length,1);assert.equal(d.keywords[0].clicks,5);assert.equal(d.keywords[0].impressions,30);assert.equal(d.keywords[0].source,'google_search');assert.deepEqual(d.uncoveredModels,['iPhone 15']);
  const glass=prepareBulkDraft({family:'iphone',service:'glass',models:['iPhone 15'],includeSuggestions:true},null);assert.match(glass.ads[0].descriptions[0],/daca panoul si functia tactila/);assert.ok(!JSON.stringify(glass.ads).includes('mai ieftin'));assert.ok(!JSON.stringify(glass.ads).includes('original garantat'));
@@ -59,9 +59,17 @@ test('a missing final receipt preserves the durable intent, and a lost lease can
 });
 test('long observed keywords retain their exact text but never fall back to another model',()=>{
  const selection={family:'samsung-s' as const,service:'battery' as const,models:['Samsung Galaxy S20','Samsung Galaxy S23 Ultra'],includeSuggestions:true};
- const d=prepareBulkDraft(selection,null);assert.ok(d.keywords.some(k=>k.text==='baterie Samsung Galaxy S23 Ultra'));
- for(const ad of d.ads)assert.equal(ad.headlines[0],'{KeyWord:Baterie Samsung S series}');
+ const d=prepareBulkDraft(selection,null);assert.ok(d.keywords.some(k=>k.text==='inlocuire baterie Samsung Galaxy S23 Ultra'));
+ for(const ad of d.ads)assert.equal(ad.headlines[0],'{KeyWord:Schimbare Baterie GSMWEB}');
  assert.equal(d.groupName,'AI Samsung S series batteries');
+});
+test('replacement intent is mandatory and enforced again on saved drafts before any Google operation',()=>{
+ for(const word of ['inlocuire','schimbare','înlocuire'])assert.equal(replacementKeyword(word+' display iPhone 15'),true);
+ for(const word of ['display iPhone 15','montaj display iPhone 15','pret display iPhone 15','inlocuiredisplay iPhone 15','vand display inlocuire iPhone 15'])assert.equal(replacementKeyword(word),false);
+ const d=draft(),bad={...d,keywords:[{...d.keywords[0],text:'display iPhone 15'}]};
+ assert.throws(()=>assertBulkDraft(bad),/inlocuire or schimbare/);
+ assert.throws(()=>bulkCreateOperations(account,'1',bad,'MAXIMIZE_CONVERSIONS'));
+ assert.throws(()=>assertBulkDraft({...d,version:'bulk-model-services-v1'}),/Review current/);
 });
 test('transport validates exact assets before one atomic write and returns only verified resources',async()=>{
  const requests:any[]=[];let phase=0;const row=fixture().get();

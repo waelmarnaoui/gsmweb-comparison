@@ -27,6 +27,11 @@ test('new ads are Enabled while their new model-specific groups start Paused; no
 test('fresh stock, verified search evidence, compatibility and campaign hours are mandatory',()=>{
  assert.throws(()=>makePublicationPlan(opportunity,{...part,eligible:false},report,'MANUAL_CPC',now));assert.throws(()=>makePublicationPlan(opportunity,part,{...report,terms:[]},'MANUAL_CPC',now));assert.throws(()=>makePublicationPlan(opportunity,part,{...report,fetchedAt:new Date(now-300001).toISOString()},'MANUAL_CPC',now));assert.equal(publicationStockProblem(plan,{...part,available:0,eligible:false},now),'stock_unavailable');assert.equal(publicationStockProblem(plan,{...part,quality:'used'},now),'stock_details_changed');assert.equal(publicationStockProblem(plan,{...part,available:2,fingerprint:'changed'},now),null);
 });
+test('automatic create boundary rejects bare product keywords and stale keyword plans',()=>{
+ assert.ok(plan.keywords.every(k=>/^(inlocuire|schimbare) /.test(k)));
+ assert.throws(()=>creationOperations({...plan,keywords:['baterie iPhone 14']}),/replacement-intent/);
+ assert.throws(()=>creationOperations({...plan,copyRulesVersion:'major-parts-15-model-dki-disclosure-v3'}),/replacement-intent/);
+});
 
 test('publication keeps the selected 15 Pro Max display model and the braces in Google assets',()=>{
  const display={...part,partType:'display',models:['iPhone 14','iPhone 15 Pro Max']};
