@@ -5,7 +5,8 @@ import {NextResponse} from 'next/server';
 export async function GET(request:Request,{params}:{params:Promise<{provider:string}>}){
  const target=new URL('/connections',appOrigin());
  try{const {user}=await requireAdmin();const {provider}=await params;
- if(!['google','google_ads','google_ads_management','supabase_calls','supabase_crm'].includes(provider))throw new IntegrationError('Unknown connection.');
+ if(!['google','google_ads','google_ads_management','google_search_console','supabase_calls','supabase_crm'].includes(provider))throw new IntegrationError('Unknown connection.');
+ if(provider==='google_search_console')target.pathname='/optimizer/keywords/search-console';
  if(provider==='google_ads')target.pathname='/ads';
  if(provider==='google_ads_management')target.pathname='/optimizer';
  await completeAuthorization(provider as ConnectionId,user.id,new URL(request.url));target.searchParams.set('connected',provider);

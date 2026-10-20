@@ -6,7 +6,8 @@ import {service} from './server';
 import {IntegrationError} from './integration-error';
 import {encryptConnection,decryptConnection} from './connection-crypto';
 import {validateOAuthState,validateAppRequestOrigin} from './connection-validation';
-export type ConnectionId='google'|'google_ads'|'google_ads_management'|'supabase_calls'|'supabase_crm'|'ai_advisor'|'agent_github';
+export type ConnectionId='google'|'google_ads'|'google_ads_management'|'google_search_console'|'supabase_calls'|'supabase_crm'|'ai_advisor'|'agent_github';
+const isGoogle=(id:ConnectionId)=>['google','google_ads','google_ads_management','google_search_console'].includes(id);
 export type Credentials={access_token:string;refresh_token:string;expires_at:number;project_key?:string};
 export type Connection={id:ConnectionId;credentials:Credentials;metadata:Record<string,string>;connected_by:string;sealed:string};
 export function appOrigin(){const value=process.env.APP_URL;if(!value)throw new IntegrationError('APP_URL is not configured.',503);const url=new URL(value);if(url.protocol!=='https:'&&url.hostname!=='localhost'&&url.hostname!=='127.0.0.1')throw new IntegrationError('APP_URL must use HTTPS.',503);return url.origin;}
@@ -15,7 +16,7 @@ export function sameOrigin(request:Request){validateAppRequestOrigin(request.hea
  VERCEL_URL:process.env.VERCEL_URL,VERCEL_PROJECT_PRODUCTION_URL:process.env.VERCEL_PROJECT_PRODUCTION_URL
 });}
 function key(){const value=process.env.CONNECTION_ENCRYPTION_KEY;if(!value||Buffer.from(value,'base64').length!==32)throw new IntegrationError('Connection encryption is not configured.',503);return value;}
-export function configuredProvider(id:ConnectionId){return Boolean(process.env.CONNECTION_ENCRYPTION_KEY&&process.env.SUPABASE_SERVICE_ROLE_KEY&&process.env.APP_URL&&(id==='google_ads_management'?process.env.GOOGLE_ADS_MANAGEMENT_OAUTH_CLIENT_ID&&process.env.GOOGLE_ADS_MANAGEMENT_OAUTH_CLIENT_SECRET:id==='google_ads'?process.env.GOOGLE_ADS_OAUTH_CLIENT_ID&&process.env.GOOGLE_ADS_OAUTH_CLIENT_SECRET:id==='google'?process.env.GOOGLE_OAUTH_CLIENT_ID&&process.env.GOOGLE_OAUTH_CLIENT_SECRET:process.env.SUPABASE_OAUTH_CLIENT_ID&&process.env.SUPABASE_OAUTH_CLIENT_SECRET));}
+export function configuredProvider(id:ConnectionId){return Boolean(process.env.CONNECTION_ENCRYPTION_KEY&&process.env.SUPABASE_SERVICE_ROLE_KEY&&process.env.APP_URL&&(id==='google_ads_management'?process.env.GOOGLE_ADS_MANAGEMENT_OAUTH_CLIENT_ID&&process.env.GOOGLE_ADS_MANAGEMENT_OAUTH_CLIENT_SECRET:id==='google_ads'?process.env.GOOGLE_ADS_OAUTH_CLIENT_ID&&process.env.GOOGLE_ADS_OAUTH_CLIENT_SECRET:id==='google'||id==='google_search_console'?process.env.GOOGLE_OAUTH_CLIENT_ID&&process.env.GOOGLE_OAUTH_CLIENT_SECRET:process.env.SUPABASE_OAUTH_CLIENT_ID&&process.env.SUPABASE_OAUTH_CLIENT_SECRET));}
 export async function getConnection(id:ConnectionId):Promise<Connection|null>{
  const {data,error}=await service().from('ga_connections').select('*').eq('id',id).maybeSingle();
  if(error)throw new IntegrationError('Connection storage is unavailable. The approved connection migration must be installed.',503);
@@ -27,13 +28,13 @@ export async function saveConnection(id:ConnectionId,credentials:Credentials,met
  if(error)throw new IntegrationError('Could not save connection. Verify the approved connection migration is installed.',503);
 }
 export function oauthConfig(id:ConnectionId){
- const google=id==='google'||id==='google_ads'||id==='google_ads_management',clientId=id==='google_ads_management'?process.env.GOOGLE_ADS_MANAGEMENT_OAUTH_CLIENT_ID:id==='google_ads'?process.env.GOOGLE_ADS_OAUTH_CLIENT_ID:google?process.env.GOOGLE_OAUTH_CLIENT_ID:process.env.SUPABASE_OAUTH_CLIENT_ID,secret=id==='google_ads_management'?process.env.GOOGLE_ADS_MANAGEMENT_OAUTH_CLIENT_SECRET:id==='google_ads'?process.env.GOOGLE_ADS_OAUTH_CLIENT_SECRET:google?process.env.GOOGLE_OAUTH_CLIENT_SECRET:process.env.SUPABASE_OAUTH_CLIENT_SECRET;
+ const google=isGoogle(id),clientId=id==='google_ads_management'?process.env.GOOGLE_ADS_MANAGEMENT_OAUTH_CLIENT_ID:id==='google_ads'?process.env.GOOGLE_ADS_OAUTH_CLIENT_ID:google?process.env.GOOGLE_OAUTH_CLIENT_ID:process.env.SUPABASE_OAUTH_CLIENT_ID,secret=id==='google_ads_management'?process.env.GOOGLE_ADS_MANAGEMENT_OAUTH_CLIENT_SECRET:id==='google_ads'?process.env.GOOGLE_ADS_OAUTH_CLIENT_SECRET:google?process.env.GOOGLE_OAUTH_CLIENT_SECRET:process.env.SUPABASE_OAUTH_CLIENT_SECRET;
  if(!clientId||!secret)throw new IntegrationError(`${google?'Google':'Supabase'} sign-in registration is not configured.`,503);
  return {clientId,secret,callback:appOrigin()+'/api/integrations/'+id+'/callback',authorize:google?'https://accounts.google.com/o/oauth2/v2/auth':'https://api.supabase.com/v1/oauth/authorize',token:google?'https://oauth2.googleapis.com/token':'https://api.supabase.com/v1/oauth/token'};
 }
 export async function tokenRequest(id:ConnectionId,params:Record<string,string>){
  const config=oauthConfig(id);const headers:Record<string,string>={'Content-Type':'application/x-www-form-urlencoded'};
- if(id==='google'||id==='google_ads'||id==='google_ads_management'){params.client_id=config.clientId;params.client_secret=config.secret;}else headers.Authorization='Basic '+Buffer.from(config.clientId+':'+config.secret).toString('base64');
+ if(isGoogle(id)){params.client_id=config.clientId;params.client_secret=config.secret;}else headers.Authorization='Basic '+Buffer.from(config.clientId+':'+config.secret).toString('base64');
  const response=await fetch(config.token,{method:'POST',headers,body:new URLSearchParams(params),cache:'no-store',signal:AbortSignal.timeout(15000)});
  if(!response.ok)throw new IntegrationError('Provider sign-in expired or was rejected. Reconnect your account.',503);
  const data=await response.json();if(typeof data.access_token!=='string'||typeof data.expires_in!=='number'||data.expires_in<=0)throw new IntegrationError('Provider did not return a valid access token.',503);
@@ -56,7 +57,7 @@ export async function startAuthorization(id:ConnectionId,userId:string){
  await getConnection(id);
  const config=oauthConfig(id),nonce=randomBytes(32).toString('base64url'),verifier=randomBytes(32).toString('base64url');
  (await cookies()).set('gsm_oauth_'+id,encryptConnection({nonce,verifier,userId,expires:Date.now()+600000},key(),'state:'+id),{httpOnly:true,secure:appOrigin().startsWith('https:'),sameSite:'lax',path:'/api/integrations/'+id,maxAge:600});
- const url=new URL(config.authorize);url.search=new URLSearchParams({client_id:config.clientId,redirect_uri:config.callback,response_type:'code',state:nonce,code_challenge:createHash('sha256').update(verifier).digest('base64url'),code_challenge_method:'S256',...(id==='google'||id==='google_ads'||id==='google_ads_management'?{scope:id==='google_ads_management'?'https://www.googleapis.com/auth/adwords':id==='google_ads'?'https://www.googleapis.com/auth/datamanager':'https://www.googleapis.com/auth/drive.file',access_type:'offline',prompt:'consent select_account'}:{})}).toString();return url.toString();
+ const url=new URL(config.authorize);url.search=new URLSearchParams({client_id:config.clientId,redirect_uri:config.callback,response_type:'code',state:nonce,code_challenge:createHash('sha256').update(verifier).digest('base64url'),code_challenge_method:'S256',...(isGoogle(id)?{scope:id==='google_search_console'?'https://www.googleapis.com/auth/webmasters.readonly':id==='google_ads_management'?'https://www.googleapis.com/auth/adwords':id==='google_ads'?'https://www.googleapis.com/auth/datamanager':'https://www.googleapis.com/auth/drive.file',access_type:'offline',prompt:'consent select_account'}:{})}).toString();return url.toString();
 }
 export async function completeAuthorization(id:ConnectionId,userId:string,url:URL){
  const jar=await cookies(),cookie=jar.get('gsm_oauth_'+id);jar.set('gsm_oauth_'+id,'',{path:'/api/integrations/'+id,maxAge:0,httpOnly:true,secure:appOrigin().startsWith('https:'),sameSite:'lax'});
@@ -70,7 +71,7 @@ export async function completeAuthorization(id:ConnectionId,userId:string,url:UR
  await saveConnection(id,{access_token:data.access_token,refresh_token:data.refresh_token,expires_at:Date.now()+data.expires_in*1000},{},userId);
 }
 export async function managementGet(id:ConnectionId,path:string){
- if(id==='google'||id==='google_ads'||id==='google_ads_management')throw new IntegrationError('Invalid provider.');const {token}=await connectionToken(id);
+ if(isGoogle(id))throw new IntegrationError('Invalid provider.');const {token}=await connectionToken(id);
  const response=await fetch('https://api.supabase.com/v1/'+path,{headers:{Authorization:'Bearer '+token},cache:'no-store',signal:AbortSignal.timeout(15000)});
  if(!response.ok)throw new IntegrationError('Supabase project access failed. Check OAuth Projects Read and Secrets Read scopes or reconnect.',503);
  return response.json();
