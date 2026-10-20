@@ -1,9 +1,34 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {clickImportRows} from '../lib/click-import';
+import {clickImportRows,clickImportFailure,eventKey,type ClickImportStage} from '../lib/click-import';
+import {IntegrationError} from '../lib/integration-error';
 import {parseTimestamp} from '../lib/timestamps';
 const first={event_id:'reused-id',timestamp:parseTimestamp('10/10/2026 09:40:07'),gclid:'same-ad',session_id:''};
 const second={...first,timestamp:parseTimestamp('10/10/2026 09:41:10')};
+test('conflicting channel identities return an actionable error before saving',()=>{
+ assert.throws(()=>clickImportRows('sheet',[{...first,channel:'call'},{...first,channel:'whatsapp'}],[]),{name:'IntegrationError',status:422,message:/conflicting call and WhatsApp/});
+ assert.equal(clickImportRows('sheet',[{...first,channel:'call'},{...second,channel:'whatsapp'}],[]).length,2);
+});
+test('unexpected import errors identify the failing step without leaking provider details',()=>{
+ const messages=new Set<string>();
+ for(const stage of ['read','parse','compare','save','record'] as ClickImportStage[]){const error=clickImportFailure(new Error('private token and raw provider response'),stage);assert.equal(error.status,503);assert.ok(!error.message.includes('private'));messages.add(error.message);}
+ assert.equal(messages.size,5);
+ const known=new IntegrationError('Row 2: invalid timestamp',422);assert.equal(clickImportFailure(known,'parse'),known);
+});
+test('same-second call and WhatsApp clicks without IDs are separate and stable across imports',()=>{
+ const call={...first,event_id:'',channel:'call'},message={...call,channel:'whatsapp'};
+ const rows=clickImportRows('sheet',[call,call,call,message],[]);
+ assert.equal(rows.length,2);assert.deepEqual(rows.map(r=>r.channel),['call','whatsapp']);
+ assert.equal(clickImportRows('sheet',[message],[])[0].source_key,rows[1].source_key);
+ assert.deepEqual(clickImportRows('sheet',[message,call],rows).map(r=>r.source_key).sort(),rows.map(r=>r.source_key).sort());
+});
+test('legacy channel identity is preserved and never reassigned to the other channel',()=>{
+ const call={...first,event_id:'',channel:'call'},message={...call,channel:'whatsapp'};
+ const legacy={source_key:eventKey('sheet',call),clicked_at:call.timestamp,gclid:call.gclid,session_id:null,channel:'call'};
+ const rows=clickImportRows('sheet',[message,call],[legacy]);
+ assert.notEqual(rows[0].source_key,legacy.source_key);assert.equal(rows[1].source_key,legacy.source_key);
+ assert.throws(()=>clickImportRows('sheet',[call,message],[{...legacy,channel:undefined}]),{name:'IntegrationError',status:409});
+});
 test('reused sheet identifiers preserve both click timestamps and remain idempotent',()=>{
  const rows=clickImportRows('sheet',[first,second,second],[]);
  assert.equal(rows.length,2);assert.equal(new Set(rows.map(r=>r.source_key)).size,2);
