@@ -7,6 +7,7 @@ import type {ManifestEntry} from '@/lib/ads-review';
 import type {UploadRecord} from '@/lib/ads-ledger';
 import {parseTimestamp,formatRomanianTimestamp} from '@/lib/timestamps';
 import type {readCrmDay} from '@/lib/crm-reader';
+import {reviewSection} from '@/lib/review-loading';
 
 type Item=Awaited<ReturnType<typeof conversionDashboard>>['items'][number];
 type Choices={measurement:ConsentStatus;personalization:ConsentStatus;obtainedAt:string};
@@ -16,6 +17,7 @@ export default function Review(){
  const [items,setItems]=useState<Item[]>([]),[choices,setChoices]=useState<Record<string,Choices>>({});
  const [manifest,setManifest]=useState<ManifestEntry[]>([]),[history,setHistory]=useState<UploadRecord[]>([]),[configured,setConfigured]=useState(false);
  const [adsAuthorized,setAdsAuthorized]=useState(false);
+ const [loaded,setLoaded]=useState({review:false,connection:false,conversions:false});
  const [confirmed,setConfirmed]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
  const [from,setFrom]=useState('2026-09-24'),[to,setTo]=useState(new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Bucharest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()));
  const [daily,setDaily]=useState(true),[sources,setSources]=useState<Sources>({clicks:[],calls:[],crm:[],crmError:''}),[tab,setTab]=useState<'clicks'|'calls'|'crm'>('clicks');
@@ -26,42 +28,48 @@ export default function Review(){
  const batches=[...new Map(history.map(row=>[row.batch_id,row])).values()];
  const uploadedIds=new Set(history.map(row=>row.payment_id));
  const shownItems=items.filter(item=>(resultFilter==='all'||(resultFilter==='ready'?item.ready:resultFilter==='uploaded'?uploadedIds.has(item.paymentId):!item.ready&&!uploadedIds.has(item.paymentId)))&&`${item.customer} ${item.phone} ${item.repair}`.toLowerCase().includes(search.toLowerCase()));
- async function json(url:string,init?:RequestInit){const response=await fetch(url,{cache:'no-store',...init}),data=await response.json();if(!response.ok)throw new Error(data.error||'Request failed');return data;}
+ async function json(url:string,init?:RequestInit){const response=await fetch(url,{cache:'no-store',...init}),data=await response.json().catch(()=>null);if(!response.ok||!data)throw new Error(data?.error||`Server returned HTTP ${response.status}. Refresh before retrying; check upload history before sending again.`);return data;}
  async function refresh(){
   setBusy(true);setNotice('');setConfirmed(false);setManifest([]);setConfigured(false);setAdsAuthorized(false);setItems([]);
+  setLoaded({review:false,connection:false,conversions:false});
   try{
-   const [sourceData,connection,{data,review}]=await Promise.all([
-    json('/api/review/sources?'+new URLSearchParams({from,to})),
-    json('/api/ads/connection'),
-    (async()=>{const data=await json('/api/conversions'+query,{method:'POST'});const review=await json('/api/ads/review'+query);return {data,review};})()
+   const conversionTask=reviewSection('CRM conversions',()=>json('/api/conversions'+query,{method:'POST'}));
+   const [sourceResult,connectionResult,conversionResult,reviewResult]=await Promise.all([
+    reviewSection('Source tables',()=>json('/api/review/sources?'+new URLSearchParams({from,to}))),
+    reviewSection('Google connection',()=>json('/api/ads/connection')),
+    conversionTask,
+    reviewSection('Google upload review',async()=>{await conversionTask;return json('/api/ads/review'+query);})
    ]);
-   setSources(sourceData);
-   const eligible:Item[]=data.items.filter((item:Item)=>item.callId&&item.paymentId);
+   setSources(sourceResult.data||{clicks:[],calls:[],crm:[],crmError:'Source tables unavailable. Refresh to check.'});
+   const eligible:Item[]=(conversionResult.data?.items||[]).filter((item:Item)=>item.callId&&item.paymentId);
    setItems(eligible);setChoices(Object.fromEntries(eligible.map(item=>[item.callId,{measurement:item.consent?.ad_user_data||'granted',personalization:item.consent?.ad_personalization||'not_asked',obtainedAt:item.consent?localTime(item.consent.obtained_at):localTime(new Date().toISOString())}])));
-   setConfigured(review.configured);setHistory(review.history);setAdsAuthorized(connection.authorized);
-   const visible=new Set(eligible.map(item=>item.paymentId));setManifest(review.manifest.filter((entry:ManifestEntry)=>visible.has(entry.paymentId)));
-  }catch(e){setNotice(e instanceof Error?e.message:'Review unavailable');}finally{setBusy(false);}
+   setConfigured(Boolean(reviewResult.data?.configured));setHistory(reviewResult.data?.history||[]);setAdsAuthorized(Boolean(connectionResult.data?.authorized));
+   setLoaded({review:reviewResult.error===null,connection:connectionResult.error===null,conversions:conversionResult.error===null});
+   const visible=new Set(eligible.map(item=>item.paymentId));setManifest((reviewResult.data?.manifest||[]).filter((entry:ManifestEntry)=>visible.has(entry.paymentId)));
+   const warning=[sourceResult.error,connectionResult.error,conversionResult.error,reviewResult.error].filter(Boolean).join(' ');
+   setNotice(warning);return warning;
+  }catch(e){const warning=e instanceof Error?e.message:'Review unavailable';setNotice(warning);return warning;}finally{setBusy(false);}
  }
  useEffect(()=>{refresh();},[]);
  async function run(action:'import'|'clicks'|'crm'|'all'){
   setBusy(true);setNotice('');setManifest([]);setConfirmed(false);
-  try{const result=await json('/api/review/actions'+query,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})});await refresh();setPanel(action==='import'?'sources':'conversions');setNotice(action==='import'?'Website clicks imported.':action==='clicks'?'Website clicks compared with call history.':action==='crm'?'Calls compared with CRM repair records.':`Calls and WhatsApp matched against website clicks and CRM: ${result.prepared??0} conversions, ${result.ready??0} ready, ${result.blocked??0} need review.`);}
+  try{const result=await json('/api/review/actions'+query,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})});const warning=await refresh();setPanel(action==='import'?'sources':'conversions');setNotice((action==='import'?'Website clicks imported.':action==='clicks'?'Website clicks compared with call history.':action==='crm'?'Calls compared with CRM repair records.':`Calls and WhatsApp matched against website clicks and CRM: ${result.prepared??0} conversions, ${result.ready??0} ready, ${result.blocked??0} need review.`)+(warning?' Refresh incomplete. '+warning:''));}
   catch(error){setNotice(error instanceof Error?error.message:'Matching failed');}finally{setBusy(false);}
  }
  async function save(){
   setBusy(true);setNotice('');setManifest([]);
   try{
    for(const callId of Object.keys(choices)){const choice=choices[callId];await json('/api/consent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({callId,adUserData:choice.measurement,adPersonalization:choice.personalization,confirmed,scriptVersion:CONSENT_SCRIPT_VERSION,obtainedAt:parseTimestamp(choice.obtainedAt.replace('T',' '))})});}
-   await refresh();setNotice('Consent choices recorded. Review the saved choices before sending.');
+   const warning=await refresh();setNotice('Consent choices recorded. Review the saved choices before sending.'+(warning?' Refresh incomplete. '+warning:''));
   }catch(e){setNotice((e instanceof Error?e.message:'Save failed')+' No Google upload was attempted. Refresh to check any choices already recorded.');}finally{setBusy(false);}
  }
  async function send(){
   setBusy(true);setNotice('');const reviewed=[...manifest];setManifest([]);setConfirmed(false);
-  try{const data=await json('/api/ads/send'+query,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmed:true,items:reviewed})});await refresh();setNotice(data.message);}
+  try{const data=await json('/api/ads/send'+query,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmed:true,items:reviewed})});const warning=await refresh();setNotice(data.message+(warning?' Refresh incomplete. '+warning:''));}
   catch(e){setNotice((e instanceof Error?e.message:'Upload failed')+' Refresh the review before trying again. Reserved payments will not be resent.');}finally{setBusy(false);}
  }
  async function validate(){setBusy(true);setNotice('');try{const data=await json('/api/ads/validate'+query,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmed:true,items:manifest})});setNotice(data.message);}catch(e){setNotice(e instanceof Error?e.message:'Google validation failed');}finally{setBusy(false);}}
- async function checkStatus(batchId?:string){setBusy(true);setNotice('');try{const data=await json('/api/ads/status',{method:'POST',...(batchId?{headers:{'Content-Type':'application/json'},body:JSON.stringify({batchId})}:{})});await refresh();setDiagnostics(previous=>({...previous,...Object.fromEntries((data.diagnostics||[]).map((entry:{batchId:string})=>[entry.batchId,entry]))}));setNotice(data.message);}catch(e){setNotice(e instanceof Error?e.message:'Status check failed');}finally{setBusy(false);}}
+ async function checkStatus(batchId?:string){setBusy(true);setNotice('');try{const data=await json('/api/ads/status',{method:'POST',...(batchId?{headers:{'Content-Type':'application/json'},body:JSON.stringify({batchId})}:{})});const warning=await refresh();setDiagnostics(previous=>({...previous,...Object.fromEntries((data.diagnostics||[]).map((entry:{batchId:string})=>[entry.batchId,entry]))}));setNotice(data.message+(warning?' Refresh incomplete. '+warning:''));}catch(e){setNotice(e instanceof Error?e.message:'Status check failed');}finally{setBusy(false);}}
  function choose(callId:string,field:keyof Choices,value:string){setChoices(previous=>({...previous,[callId]:{...previous[callId],[field]:value}}));setConfirmed(false);}
  function date(field:'from'|'to',value:string){if(field==='from')setFrom(value);else setTo(value);setManifest([]);setConfirmed(false);setItems([]);setChoices({});setSources({clicks:[],calls:[],crm:[],crmError:''});}
  return <div className="setup-page consent-review"><header className="setup-header"><a href="/"><ArrowLeft size={16}/>Dashboard</a><a href="/ads">Google Ads connection</a></header><main className="setup-main">
@@ -76,8 +84,8 @@ export default function Review(){
  {tab==='calls'&&sources.calls.map(row=><tr key={row.id}><td data-label="Phone">{row.phone}</td><td data-label="Time">{formatRomanianTimestamp(row.started_at)}</td><td data-label="Interaction">{row.external_id?.startsWith('whatsapp-manual:')?'WhatsApp · manual':row.direction}<small>{row.firstInteraction?'First customer interaction':'Follow-up / not eligible'}</small></td></tr>)}
  {tab==='crm'&&sources.crm.map(row=><tr key={row.id}><td data-label="Client / repair"><b>{row.customer}</b><small>{row.phone} · {row.repair}</small></td><td data-label="Time">{formatRomanianTimestamp(row.time)}</td><td data-label="Status / profit">{row.status}<small>{row.profit===null?'Profit missing':row.profit.toLocaleString('ro-RO')+' RON'}</small><small>{row.matchingReason||'Contact and profit eligible; conversion review checks consent and upload status'}</small>{row.contactTime&&<small>First contact: {formatRomanianTimestamp(row.contactTime)}</small>}</td></tr>)}
  </tbody></table></div>{!sources[tab].length&&<p>No {tab==='crm'?'CRM repair entries':tab==='calls'?'calls':'website clicks'} in this date range.</p>}</section>}
- {notice&&<p role="status" className="review-notice">{notice}</p>}{!configured&&<p role="alert">Google upload tracking needs database setup. No upload can start until it is installed.</p>}
- {!busy&&!adsAuthorized&&<p role="alert">Google Ads account is not connected in this app. <a href="/ads">Connect Google Ads</a></p>}
+ {notice&&<p role="status" className="review-notice">{notice}</p>}{loaded.review&&!configured&&<p role="alert">Google upload tracking needs database setup. No upload can start until it is installed.</p>}
+ {!busy&&loaded.connection&&!adsAuthorized&&<p role="alert">Google Ads account is not connected in this app. <a href="/ads">Connect Google Ads</a></p>}
  {panel==='conversions'&&<><div className="review-search"><input aria-label="Find conversion" placeholder="Find client, phone or repair" value={search} onChange={event=>setSearch(event.target.value)}/><select aria-label="Conversion status filter" value={resultFilter} onChange={event=>setResultFilter(event.target.value)}><option value="all">All conversions</option><option value="ready">Ready to send</option><option value="review">Needs review</option><option value="uploaded">Upload recorded</option></select></div> <details><summary>Verbal consent statement</summary><p>{CONSENT_SCRIPT}</p><a href="https://business.safety.google/privacy/" target="_blank" rel="noreferrer">Google customer-data information</a></details>
  <div className="table-scroll"><table><thead><tr><th>CLIENT</th><th>PROFIT</th><th>MEASUREMENT CONSENT</th><th>PERSONALIZATION</th><th>CONSENT OBTAINED (BUCHAREST)</th><th>UPLOAD STATUS</th></tr></thead><tbody>
  {shownItems.map(item=>{const record=history.find(row=>row.payment_id===item.paymentId);return <tr key={item.id}>
@@ -86,7 +94,7 @@ export default function Review(){
  <td data-label="Personalization"><select disabled={busy} aria-label={'Personalization consent for '+item.customer} value={choices[item.callId]?.personalization||'not_asked'} onChange={e=>choose(item.callId,'personalization',e.target.value)}>{CONSENT_STATUSES.map(status=><option key={status} value={status}>{status.replace('_',' ')}</option>)}</select></td>
  <td data-label="Consent obtained (Bucharest)"><input disabled={busy} type="datetime-local" step="1" aria-label={'Consent obtained for '+item.customer} value={choices[item.callId]?.obtainedAt||''} onChange={e=>choose(item.callId,'obtainedAt',e.target.value)}/></td>
  <td data-label="Upload status">{record?record.state:item.consent?item.reason||'Ready':'Unsaved consent proposal'}</td></tr>;})}
- </tbody></table></div>{!items.length&&!busy&&<p>No financially verified conversions in this date range.</p>}
+ </tbody></table></div>{!items.length&&!busy&&loaded.conversions&&<p>No matched conversions in this date range.</p>}
  <p className="review-attestation"><label><input disabled={busy} type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>I have explained the purposes to each client and verified their actual choices. Every client marked granted explicitly agreed.</label></p>
  <div className="review-actions review-sticky-actions"><button className="secondary" onClick={save} disabled={busy||!confirmed||!items.length||Object.values(choices).some(choice=>!choice.obtainedAt)}><Save size={16}/>Record consent choices</button><button className="secondary" disabled={busy||dirty||!confirmed||!adsAuthorized||!manifest.length} onClick={validate}><ShieldCheck size={16}/>Validate only</button><button className="primary" disabled={busy||dirty||!confirmed||!configured||!adsAuthorized||!manifest.length} onClick={send}><Send size={16}/>Send {manifest.length||''} to Google</button></div>
  </>}
