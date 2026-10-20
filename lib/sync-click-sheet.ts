@@ -23,8 +23,9 @@ export async function syncClickSheet(client:SupabaseClient,force=false){
   stage='compare';
   const keys=[...new Set(values.map(v=>eventKey(source.id,v)))],existing:ExistingClick[]=[];
   for(let i=0;i<keys.length;i+=100){
-   const {data,error}=await client.from('ga_clicks').select('source_key,clicked_at,gclid,session_id').in('source_key',keys.slice(i,i+100));
-   if(error)throw new IntegrationError('Existing website clicks could not be read.',503);existing.push(...(data||[]));
+   const {data,error}=await client.from('ga_clicks').select('source_key,clicked_at,gclid,session_id,ga_click_channels(channel)').in('source_key',keys.slice(i,i+100));
+   if(error)throw new IntegrationError('Existing website clicks and their channels could not be read. Check the approved WhatsApp database setup.',503);
+   for(const row of data||[]){const linked=row.ga_click_channels as {channel:string}|{channel:string}[]|null;existing.push({...row,channel:Array.isArray(linked)?linked[0]?.channel:linked?.channel});}
   }
   const rows=clickImportRows(source.id,values,existing);
   stage='save';
