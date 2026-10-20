@@ -1,9 +1,20 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {clickImportRows} from '../lib/click-import';
+import {clickImportRows,clickImportFailure,type ClickImportStage} from '../lib/click-import';
+import {IntegrationError} from '../lib/integration-error';
 import {parseTimestamp} from '../lib/timestamps';
 const first={event_id:'reused-id',timestamp:parseTimestamp('10/10/2026 09:40:07'),gclid:'same-ad',session_id:''};
 const second={...first,timestamp:parseTimestamp('10/10/2026 09:41:10')};
+test('conflicting channel identities return an actionable error before saving',()=>{
+ assert.throws(()=>clickImportRows('sheet',[{...first,channel:'call'},{...first,channel:'whatsapp'}],[]),{name:'IntegrationError',status:422,message:/conflicting call and WhatsApp/});
+ assert.equal(clickImportRows('sheet',[{...first,channel:'call'},{...second,channel:'whatsapp'}],[]).length,2);
+});
+test('unexpected import errors identify the failing step without leaking provider details',()=>{
+ const messages=new Set<string>();
+ for(const stage of ['read','parse','compare','save','record'] as ClickImportStage[]){const error=clickImportFailure(new Error('private token and raw provider response'),stage);assert.equal(error.status,503);assert.ok(!error.message.includes('private'));messages.add(error.message);}
+ assert.equal(messages.size,5);
+ const known=new IntegrationError('Row 2: invalid timestamp',422);assert.equal(clickImportFailure(known,'parse'),known);
+});
 test('reused sheet identifiers preserve both click timestamps and remain idempotent',()=>{
  const rows=clickImportRows('sheet',[first,second,second],[]);
  assert.equal(rows.length,2);assert.equal(new Set(rows.map(r=>r.source_key)).size,2);

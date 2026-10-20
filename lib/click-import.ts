@@ -1,4 +1,11 @@
 import {createHash} from 'node:crypto';
+import {IntegrationError} from './integration-error';
+export type ClickImportStage='read'|'parse'|'compare'|'save'|'record';
+export function clickImportFailure(error:unknown,stage:ClickImportStage){
+ if(error instanceof IntegrationError)return error;
+ const messages:Record<ClickImportStage,string>={read:'Google Sheets could not be read. Check the sheet connection and try again.',parse:'The spreadsheet returned an unsupported row format. Check the header row and timestamp cells.',compare:'Saved website clicks could not be compared. Check the attribution database connection.',save:'Website clicks could not be saved. Refresh before retrying; already saved clicks will not be duplicated.',record:'Website import status could not be saved. Attribution is paused; refresh before retrying.'};
+ return new IntegrationError(messages[stage],503);
+}
 export type ExistingClick={source_key:string;clicked_at:string;gclid:string|null;session_id:string|null};
 export function eventKey(sheet:string,values:Record<string,string>){
  const legacy=Object.fromEntries(Object.entries(values).filter(([key])=>key!=='channel'));
@@ -13,7 +20,7 @@ export function clickImportRows(sheet:string,values:Record<string,string>[],exis
   if(old&&Date.parse(old.clicked_at)===Date.parse(v.timestamp)&&(old.gclid||'')===(v.gclid||'')&&(old.session_id||'')===(v.session_id||''))key=base;
   const row={source_key:key,clicked_at:v.timestamp,gclid:v.gclid||null,session_id:v.session_id||null,campaign:v.campaign||null,page_url:v.page_url||null};
   const channel=v.channel||rows.get(key)?.channel;
-  if(channel&&rows.get(key)?.channel&&channel!==rows.get(key)!.channel)throw new Error('Website event has conflicting call and WhatsApp labels. Give each click a unique event ID.');
+  if(channel&&rows.get(key)?.channel&&channel!==rows.get(key)!.channel)throw new IntegrationError('Website event has conflicting call and WhatsApp labels. The same event ID, timestamp, GCLID and session are labelled as both call and WhatsApp. Give each distinct click a unique event ID, then import again.',422);
   rows.set(key,{...row,...(channel?{channel}:{})});
  }
  return [...rows.values()];
