@@ -7,4 +7,13 @@ test('links normalized phone through repair settlement to real payment',()=>{con
 test('excludes inactive, duplicate, unrelated and invalid parent payments',()=>{const p=data.payments[0];const row=compareCrmCall(call,{...data,payments:[p,p,{...p,id:'inactive',active:false},{...p,id:'other',repairSettlementId:'other'},{...p,id:'invalid',saleSettlementId:'sale'}]});assert.equal(row.recordedTotal,120.5);});
 test('does not select between normalized duplicate clients',()=>{const row=compareCrmCall(call,{...data,customers:[...data.customers,{...data.customers[0],id:'duplicate',phone:'0040722123456'}]});assert.equal(row.status,'ambiguous');assert.equal(row.recordedTotal,0);});
 test('does not associate missing or invalid phone numbers',()=>{assert.equal(compareCrmCall({...call,phone:'private'},data).status,'not_found');});
+test('refund adjustments preserve repair matching and signed recorded totals',()=>{
+ const row=compareCrmCall(call,{...data,payments:[...data.payments,{...data.payments[0],id:'refund',amount:'-20.50'}]});
+ assert.equal(row.status,'found');assert.equal(row.recordedTotal,100);assert.equal(row.repairs.length,1);
+ assert.equal(row.payments.find(p=>p.id==='refund')?.amount,-20.5);
+ assert.ok(row.payments.every(p=>p.profit===null));
+});
+test('malformed payment amounts return a safe actionable integration error',()=>{
+ assert.throws(()=>compareCrmCall(call,{...data,payments:[{...data.payments[0],amount:'not money'}]}),{name:'IntegrationError',status:422});
+});
 

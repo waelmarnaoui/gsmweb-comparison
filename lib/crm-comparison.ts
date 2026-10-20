@@ -1,5 +1,6 @@
 import {normalizeRomanianPhone} from './attribution';
 import {allocatePaymentCosts,moneyCents} from './payment-profit';
+import {IntegrationError} from './integration-error';
 export type CrmCustomer={id:string;name:string;phone:string;firstVisit:string;lastVisit:string};
 export type CrmRepair={id:string;clientId:string;repairCode:string;phoneModel:string;entryDate:string;status:string;customerPrice?:string|number;repairCost?:string|number};
 export type CrmSale={id:string;clientId:string|null;productName:string;saleDate:string;salePrice?:string|number;productCost?:string|number;quantity?:number};
@@ -7,7 +8,11 @@ export type CrmSettlement={id:string;repairId?:string;saleId?:string};
 export type CrmPayment={id:string;repairSettlementId:string|null;saleSettlementId:string|null;amount:string|number;paidDate:string;paymentMethod:string;active:boolean};
 export type CrmData={customers:CrmCustomer[];repairs:CrmRepair[];sales:CrmSale[];repairSettlements:CrmSettlement[];saleSettlements:CrmSettlement[];payments:CrmPayment[]};
 export function safePhone(phone:string){try{return normalizeRomanianPhone(phone);}catch{return null;}}
-function cents(value:string|number){const text=String(value);if(!/^\d{1,8}(?:\.\d{1,2})?$/.test(text))throw new Error('Invalid CRM payment amount');const [whole,fraction='']=text.split('.');return Number(whole)*100+Number(fraction.padEnd(2,'0'));}
+function cents(value:string|number){
+ const text=String(value),negative=text.startsWith('-'),amount=moneyCents(negative?text.slice(1):text);
+ if(amount===null)throw new IntegrationError('A CRM payment has an invalid amount. Correct its amount in CRM, then refresh Conversion Review. No Google upload was attempted.',422);
+ return negative?-amount:amount;
+}
 export function compareCrmCall(call:{id:string;phone:string;started_at:string},data:CrmData){
  const phone=safePhone(call.phone),customers=phone?data.customers.filter(c=>safePhone(c.phone)===phone):[];
  if(customers.length!==1)return {callId:call.id,phone:call.phone,calledAt:call.started_at,status:customers.length?'ambiguous':'not_found',customer:null,repairs:[],payments:[],repairPaymentIds:{} as Record<string,string[]>,recordedTotal:0,candidateCustomers:customers.map(c=>({id:c.id,name:c.name}))};
