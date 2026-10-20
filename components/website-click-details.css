@@ -1,0 +1,7 @@
+.consent-review .website-click-evidence{margin:10px 0 0;max-width:360px;min-width:0;font-size:12px}
+.website-click-evidence summary{cursor:pointer;color:#126b57;font-weight:600;min-height:32px;padding:7px 0;overflow-wrap:anywhere}
+.website-click-evidence summary:focus-visible{outline:2px solid #126b57;outline-offset:3px}
+.website-click-evidence dl{margin:4px 0 0;border-top:1px solid #dae2e8}
+.website-click-evidence dl>div{padding:7px 0;border-bottom:1px solid #e4e9ec}
+.website-click-evidence dt{font-weight:600;color:#52636b}
+.website-click-evidence dd{margin:3px 0 0;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
