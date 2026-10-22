@@ -8,7 +8,7 @@ export async function GET(){try{
  const {client}=await requireAdmin();const entries:Record<string,unknown>[]=[];
  for(let offset=0;offset<10000;offset+=500){const {data,error}=await client.from('ga_whatsapp_entries').select('call_id,phone,time_precision,created_at,ga_calls(started_at)').order('created_at',{ascending:false}).range(offset,offset+499);if(error){if(['42P01','PGRST205','PGRST200'].includes(error.code))return Response.json({configured:false,entries:[]},{headers:{'Cache-Control':'no-store'}});throw new IntegrationError('WhatsApp entries could not be read.',503);}entries.push(...(data||[]));if((data||[]).length<500)break;if(offset===9500)throw new IntegrationError('WhatsApp entry limit reached. No partial review returned.',503);}
  const history=await readCallHistory(client,new Date().toISOString()),primary=new Set(firstInteractions(history).filter(g=>g.eligible).map(g=>g.primary.id));
- return Response.json({configured:true,entries:entries.map(entry=>({...entry,firstInteraction:primary.has(String(entry.call_id))}))},{headers:{'Cache-Control':'no-store'}});
+ return Response.json({configured:true,serverNow:new Date().toISOString(),entries:entries.map(entry=>({...entry,firstInteraction:primary.has(String(entry.call_id))}))},{headers:{'Cache-Control':'no-store'}});
  }catch(error){return apiError(error);}}
 export async function POST(request:Request){try{
  const {client}=await requireAdmin();sameOrigin(request);const text=await request.text();if(text.length>2048)throw new IntegrationError('Entry is too large.');
