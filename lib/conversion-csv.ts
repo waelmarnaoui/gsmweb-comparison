@@ -3,6 +3,7 @@ import {stringify} from 'csv-stringify/sync';
 import {parse} from 'csv-parse/sync';
 import {formatRomanianTimestamp} from './timestamps';
 import {safePhone} from './crm-comparison';
+import {websiteLinkedConversion} from './conversion-upload-policy';
 
 type ExportRow={ready:boolean;gclid:string;phone:string;conversionTime:string;amount:number;paymentId:string;userDataAllowed?:boolean;gbraid?:string;wbraid?:string;paymentAmount?:number;chargedAmount?:number|null;allocatedCost?:number|null;timeBasis?:string};
 // Keep this schema stable after configuring the Data Manager field mapping.
@@ -19,7 +20,7 @@ export function conversionCsv(items:ExportRow[],name:string){
  const seen=new Set<string>();
  const rows:string[][]=[];
  for(const c of items){
-  if(!c.ready)continue;
+  if(!c.ready||!websiteLinkedConversion(c))continue;
   const phone=c.userDataAllowed===true?safePhone(c.phone):null;
   if(!name.trim()||!c.paymentId||seen.has(c.paymentId)||(!c.gclid&&!phone)||!Number.isFinite(c.amount))throw new Error('Invalid or duplicate conversion export');
   seen.add(c.paymentId);

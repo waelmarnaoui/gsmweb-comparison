@@ -12,12 +12,12 @@ test('rejects conflicting, malformed, missing and ambiguous identifiers',()=>{
  assert.deepEqual(extractBraidIdentifiers('https://gsmweb.site/?gbraid=abc',''),{gbraid:'',wbraid:''});
 });
 test('exports braid columns only for click-linked conversions without changing timestamps',()=>{
- const base={ready:true,gclid:'Click_1',phone:'+40712345678',conversionTime:'2026-10-09T15:05:24Z',amount:450,paymentId:'crm:payment',userDataAllowed:true};
- const csv=conversionCsv([{...base,gbraid:'Gb_1'},{...base,gclid:'',gbraid:'NotLinked',paymentId:'crm:phone'}],'Verified Payments');
- const [headers,click,phone]=parse(csv);
+ const base={ready:true,gclid:'Click_1',phone:'+40712345678',conversionTime:'2026-10-09T15:05:24Z',amount:450,paymentId:'crm:payment',userDataAllowed:true,timeBasis:'website_click'};
+ const csv=conversionCsv([{...base,gbraid:'Gb_1'},{...base,gclid:'',gbraid:'NotLinked',timeBasis:'first_crm_match',paymentId:'crm:phone'}],'Verified Payments');
+ const [headers,click]=parse(csv);
  assert.deepEqual(headers.slice(6),['GBRAID','WBRAID','Order ID']);
  assert.ok(csv.includes('"2026-10-09 18:05:24"'));
  assert.equal(click[6],'Gb_1');assert.equal(click[7],'');
- assert.equal(phone[6],'');assert.equal(phone[7],'');
+ assert.equal(parse(csv).length,2);
  assert.ok(!csv.includes('NotLinked'));
 });

@@ -9,6 +9,7 @@ import {parseTimestamp,formatRomanianTimestamp} from '@/lib/timestamps';
 import type {readCrmDay} from '@/lib/crm-reader';
 import {reviewSection} from '@/lib/review-loading';
 import {WebsiteClickEvidence} from '@/components/website-click-details';
+import {ManualClickLink} from '@/components/manual-click-link';
 
 type Item=Awaited<ReturnType<typeof conversionDashboard>>['items'][number];
 type Choices={measurement:ConsentStatus;personalization:ConsentStatus;obtainedAt:string};
@@ -20,7 +21,7 @@ export default function Review(){
  const [adsAuthorized,setAdsAuthorized]=useState(false);
  const [loaded,setLoaded]=useState({review:false,connection:false,conversions:false});
  const [confirmed,setConfirmed]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
- const [from,setFrom]=useState('2026-09-24'),[to,setTo]=useState(new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Bucharest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()));
+ const [from,setFrom]=useState(''),[to,setTo]=useState('');
  const [daily,setDaily]=useState(true),[sources,setSources]=useState<Sources>({clicks:[],calls:[],crm:[],crmError:''}),[tab,setTab]=useState<'clicks'|'calls'|'crm'>('clicks');
  const [panel,setPanel]=useState<'conversions'|'sources'|'history'>('conversions'),[search,setSearch]=useState(''),[resultFilter,setResultFilter]=useState('all');
  const query='?'+new URLSearchParams({from,to,...(daily?{activityDay:'range'}:{})}).toString();
@@ -30,16 +31,17 @@ export default function Review(){
  const uploadedIds=new Set(history.map(row=>row.payment_id));
  const shownItems=items.filter(item=>(resultFilter==='all'||(resultFilter==='ready'?item.ready:resultFilter==='uploaded'?uploadedIds.has(item.paymentId):!item.ready&&!uploadedIds.has(item.paymentId)))&&`${item.customer} ${item.phone} ${item.repair}`.toLowerCase().includes(search.toLowerCase()));
  async function json(url:string,init?:RequestInit){const response=await fetch(url,{cache:'no-store',...init}),data=await response.json().catch(()=>null);if(!response.ok||!data)throw new Error(data?.error||`Server returned HTTP ${response.status}. Refresh before retrying; check upload history before sending again.`);return data;}
- async function refresh(){
+ async function refresh(override?:{from:string;to:string}){
+  const dates=override||{from,to},dataQuery='?'+new URLSearchParams({...dates,...(daily?{activityDay:'range'}:{})}).toString();
   setBusy(true);setNotice('');setConfirmed(false);setManifest([]);setConfigured(false);setAdsAuthorized(false);setItems([]);
   setLoaded({review:false,connection:false,conversions:false});
   try{
-   const conversionTask=reviewSection('CRM conversions',()=>json('/api/conversions'+query,{method:'POST'}));
+   const conversionTask=reviewSection('CRM conversions',()=>json('/api/conversions'+dataQuery,{method:'POST'}));
    const [sourceResult,connectionResult,conversionResult,reviewResult]=await Promise.all([
-    reviewSection('Source tables',()=>json('/api/review/sources?'+new URLSearchParams({from,to}))),
+    reviewSection('Source tables',()=>json('/api/review/sources?'+new URLSearchParams(dates))),
     reviewSection('Google connection',()=>json('/api/ads/connection')),
     conversionTask,
-    reviewSection('Google upload review',async()=>{await conversionTask;return json('/api/ads/review'+query);})
+    reviewSection('Google upload review',async()=>{await conversionTask;return json('/api/ads/review'+dataQuery);})
    ]);
    setSources(sourceResult.data||{clicks:[],calls:[],crm:[],crmError:'Source tables unavailable. Refresh to check.'});
    const eligible:Item[]=(conversionResult.data?.items||[]).filter((item:Item)=>item.callId&&item.paymentId);
@@ -51,7 +53,7 @@ export default function Review(){
    setNotice(warning);return warning;
   }catch(e){const warning=e instanceof Error?e.message:'Review unavailable';setNotice(warning);return warning;}finally{setBusy(false);}
  }
- useEffect(()=>{refresh();},[]);
+ useEffect(()=>{setBusy(true);json('/api/review/date').then(({today})=>{if(typeof today!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(today))throw new Error('Current review date is unavailable.');setFrom(today);setTo(today);return refresh({from:today,to:today});}).catch(error=>{setNotice(error.message);setBusy(false);});},[]);
  async function run(action:'import'|'clicks'|'crm'|'all'){
   setBusy(true);setNotice('');setManifest([]);setConfirmed(false);
   try{const result=await json('/api/review/actions'+query,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})});const warning=await refresh();setPanel(action==='import'?'sources':'conversions');setNotice((action==='import'?'Website clicks imported.':action==='clicks'?'Website clicks compared with call history.':action==='crm'?'Calls compared with CRM repair records.':`Calls and WhatsApp matched against website clicks and CRM: ${result.prepared??0} conversions, ${result.ready??0} ready, ${result.blocked??0} need review.`)+(warning?' Refresh incomplete. '+warning:''));}
@@ -74,7 +76,8 @@ export default function Review(){
  function choose(callId:string,field:keyof Choices,value:string){setChoices(previous=>({...previous,[callId]:{...previous[callId],[field]:value}}));setConfirmed(false);}
  function date(field:'from'|'to',value:string){if(field==='from')setFrom(value);else setTo(value);setManifest([]);setConfirmed(false);setItems([]);setChoices({});setSources({clicks:[],calls:[],crm:[],crmError:''});}
  return <div className="setup-page consent-review"><header className="setup-header"><a href="/"><ArrowLeft size={16}/>Dashboard</a><a href="/ads">Google Ads connection</a></header><main className="setup-main">
- <div className="section-heading"><h1>Conversion review</h1><button className="secondary" disabled={busy} onClick={refresh}><RefreshCw size={16}/>Refresh</button></div>
+ <div className="section-heading"><h1>Conversion review</h1><button className="secondary" disabled={busy||!from||!to} onClick={()=>refresh()}><RefreshCw size={16}/>Refresh</button></div>
+ <p className="review-notice">Google uploads: verified website-click conversions only.</p>
  <div className="review-filters">{<label>From<input type="date" value={from} disabled={busy} onChange={e=>date('from',e.target.value)}/></label>}<label>To<input type="date" value={to} disabled={busy} onChange={e=>date('to',e.target.value)}/></label><label><input type="checkbox" checked={daily} disabled={busy} onChange={e=>{setDaily(e.target.checked);setManifest([]);setConfirmed(false);}}/>Filter by repair entry date</label><span>Google Ads 205-043-4247 · Goal 7835048106</span></div>
  <div className="workspace-counts"><div><small>Matched repairs / sales</small><strong>{items.length}</strong></div><div><small>Ready to send</small><strong>{manifest.length}</strong></div><div><small>Needs review</small><strong>{items.filter(item=>!item.ready&&!uploadedIds.has(item.paymentId)).length}</strong></div><div><small>Upload batches</small><strong>{batches.length}</strong></div></div>
  <div className="review-main-tabs" role="tablist" aria-label="Conversion workspace">{([["conversions","Conversions"],["sources","Source records"],["history","Upload history"]] as const).map(([key,label])=><button key={key} role="tab" aria-selected={panel===key} onClick={()=>setPanel(key)}>{label}</button>)}</div>
@@ -82,7 +85,7 @@ export default function Review(){
  {panel==='sources'&&<section className="review-sources"><div className="review-actions" role="tablist" aria-label="Daily source records">{(['clicks','calls','crm'] as const).map(key=><button key={key} role="tab" aria-selected={tab===key} className={tab===key?'primary':'secondary'} onClick={()=>setTab(key)}>{key==='clicks'?'Website clicks':key==='calls'?'Calls & WhatsApp':'CRM repair entries'} ({sources[key].length})</button>)}</div>{sources.crmError&&<p role="alert">{sources.crmError}</p>}
  <div className="table-scroll"><table><thead><tr><th>{tab==='clicks'?'CLICK / CAMPAIGN':tab==='calls'?'PHONE':'CLIENT / REPAIR'}</th><th>BUCHAREST TIME</th><th>{tab==='clicks'?'GCLID':tab==='calls'?'INTERACTION':'STATUS / PROFIT'}</th></tr></thead><tbody>
  {tab==='clicks'&&sources.clicks.map(row=><tr key={row.id}><td data-label="Campaign">{row.campaign||'Website click'}<small>{row.page_url}</small></td><td data-label="Time">{formatRomanianTimestamp(row.clicked_at)}</td><td data-label="GCLID">{row.gclid||'No GCLID'}</td></tr>)}
- {tab==='calls'&&sources.calls.map(row=><tr key={row.id}><td data-label="Phone">{row.phone}</td><td data-label="Time">{formatRomanianTimestamp(row.started_at)}</td><td data-label="Interaction">{row.external_id?.startsWith('whatsapp-manual:')?'WhatsApp · manual':row.direction}<small>{row.firstInteraction?'First customer interaction':'Follow-up / not eligible'}</small></td></tr>)}
+ {tab==='calls'&&sources.calls.map(row=><tr key={row.id}><td data-label="Phone">{row.phone}</td><td data-label="Time">{formatRomanianTimestamp(row.started_at)}</td><td data-label="Interaction">{row.external_id?.startsWith('whatsapp-manual:')?'WhatsApp · manual':row.direction}<small>{row.firstInteraction?'First customer interaction':'Follow-up / manual link only'}</small></td></tr>)}
  {tab==='crm'&&sources.crm.map(row=><tr key={row.id}><td data-label="Client / repair"><b>{row.customer}</b><small>{row.phone} · {row.repair}</small></td><td data-label="Time">{formatRomanianTimestamp(row.time)}</td><td data-label="Status / profit">{row.status}<small>{row.profit===null?'Profit missing':row.profit.toLocaleString('ro-RO')+' RON'}</small><small>{row.matchingReason||'Contact and profit eligible; conversion review checks consent and upload status'}</small>{row.contactTime&&<small>First contact: {formatRomanianTimestamp(row.contactTime)}</small>}</td></tr>)}
  </tbody></table></div>{!sources[tab].length&&<p>No {tab==='crm'?'CRM repair entries':tab==='calls'?'calls':'website clicks'} in this date range.</p>}</section>}
  {notice&&<p role="status" className="review-notice">{notice}</p>}{loaded.review&&!configured&&<p role="alert">Google upload tracking needs database setup. No upload can start until it is installed.</p>}
@@ -90,7 +93,7 @@ export default function Review(){
  {panel==='conversions'&&<><div className="review-search"><input aria-label="Find conversion" placeholder="Find client, phone or repair" value={search} onChange={event=>setSearch(event.target.value)}/><select aria-label="Conversion status filter" value={resultFilter} onChange={event=>setResultFilter(event.target.value)}><option value="all">All conversions</option><option value="ready">Ready to send</option><option value="review">Needs review</option><option value="uploaded">Upload recorded</option></select></div> <details><summary>Verbal consent statement</summary><p>{CONSENT_SCRIPT}</p><a href="https://business.safety.google/privacy/" target="_blank" rel="noreferrer">Google customer-data information</a></details>
  <div className="table-scroll"><table><thead><tr><th>CLIENT</th><th>PROFIT</th><th>MEASUREMENT CONSENT</th><th>PERSONALIZATION</th><th>CONSENT OBTAINED (BUCHAREST)</th><th>UPLOAD STATUS</th></tr></thead><tbody>
  {shownItems.map(item=>{const record=history.find(row=>row.payment_id===item.paymentId);return <tr key={item.id}>
- <td data-label="Client"><b>{item.customer}</b><small>{item.phone} · {item.repair}</small><small>{item.interactionChannel==='whatsapp'?'WhatsApp · manual + CRM':item.gclid?'Website click + CRM':'Phone + CRM'}{item.interactionChannel==='whatsapp'&&item.gclid?' · Website click':''}</small><WebsiteClickEvidence click={item.websiteClick}/></td><td data-label="Profit">{item.amount.toLocaleString('ro-RO')} RON<small>{item.conversionTime?formatRomanianTimestamp(item.conversionTime):'Match time pending'}</small><small>{item.recordBasis?'Repair profit':'Payment profit'} · Recorded payments: {item.paymentAmount.toLocaleString('ro-RO')} RON</small></td>
+ <td data-label="Client"><b>{item.customer}</b><small>{item.phone} · {item.repair}</small><small>{item.interactionChannel==='whatsapp'?'WhatsApp · manual + CRM':item.gclid?'Website click + CRM':'Phone + CRM'}{item.interactionChannel==='whatsapp'&&item.gclid?' · Website click':''}{item.manualLink?' · Manually linked':''}</small><WebsiteClickEvidence click={item.websiteClick}/>{!item.websiteClick&&!record&&<ManualClickLink callId={item.callId} from={from} to={to} disabled={busy} onLinked={()=>refresh()}/>}</td><td data-label="Profit">{item.amount.toLocaleString('ro-RO')} RON<small>{item.conversionTime?formatRomanianTimestamp(item.conversionTime):'Match time pending'}</small><small>{item.recordBasis?'Repair profit':'Payment profit'} · Recorded payments: {item.paymentAmount.toLocaleString('ro-RO')} RON</small></td>
  <td data-label="Measurement consent"><select disabled={busy} aria-label={'Measurement consent for '+item.customer} value={choices[item.callId]?.measurement||'granted'} onChange={e=>choose(item.callId,'measurement',e.target.value)}>{CONSENT_STATUSES.map(status=><option key={status} value={status}>{status.replace('_',' ')}</option>)}</select></td>
  <td data-label="Personalization"><select disabled={busy} aria-label={'Personalization consent for '+item.customer} value={choices[item.callId]?.personalization||'not_asked'} onChange={e=>choose(item.callId,'personalization',e.target.value)}>{CONSENT_STATUSES.map(status=><option key={status} value={status}>{status.replace('_',' ')}</option>)}</select></td>
  <td data-label="Consent obtained (Bucharest)"><input disabled={busy} type="datetime-local" step="1" aria-label={'Consent obtained for '+item.customer} value={choices[item.callId]?.obtainedAt||''} onChange={e=>choose(item.callId,'obtainedAt',e.target.value)}/></td>

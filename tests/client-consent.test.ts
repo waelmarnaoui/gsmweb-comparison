@@ -18,7 +18,7 @@ test('unknown, refused, withdrawn, changed phone and future consent fail closed'
  assert.equal(consentAllowsUserData({...consent,obtained_at:'2026-10-12T00:00:00Z'},consent.phone,now),false);
 });
 test('CSV never includes phone hashes without explicit allowed-user-data flag',()=>{
- const row={ready:true,gclid:'click',phone:consent.phone,conversionTime:input.obtainedAt,amount:100,paymentId:'crm:payment'};
+ const row={ready:true,gclid:'click',phone:consent.phone,conversionTime:input.obtainedAt,amount:100,paymentId:'crm:payment',timeBasis:'website_click'};
  assert.equal(parse(conversionCsv([row],'CRM'))[1][1],'');
  assert.throws(()=>conversionCsv([{...row,gclid:''}],'CRM'));
  assert.match(parse(conversionCsv([{...row,userDataAllowed:true}],'CRM'))[1][1],/^[a-f0-9]{64}$/);

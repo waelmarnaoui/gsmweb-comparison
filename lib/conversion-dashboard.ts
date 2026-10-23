@@ -20,9 +20,10 @@ import {consentAllowsUserData} from './client-consent';
 import {uploadHistory} from './ads-ledger';
 import {attributeRepairs,crmVisitTime} from './repair-attribution';
 import {websiteClickDetails} from './website-click-details';
+import {bucharestToday,WEBSITE_CLICK_REQUIRED} from './conversion-upload-policy';
 type ConversionItem={id:string;customer:string;phone:string;callTime:string;repair:string;campaign:string;gclid:string;paymentId:string;conversionTime:string;amount:number;paymentAmount:number;chargedAmount:number|null;allocatedCost:number|null;historyTotal:number;ready:boolean;reason:string;timeBasis:'website_click'|'first_paid_match'|'first_crm_match';recordBasis?:'repair_record';activityTime?:string};
 export function conversionDateRange(url:URL){
- const from=url.searchParams.get('from')||'2026-09-24',to=url.searchParams.get('to')||new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Bucharest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ const today=bucharestToday(),from=url.searchParams.get('from')||today,to=url.searchParams.get('to')||today;
  if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to))throw new IntegrationError('Select valid start and end dates.');
  let start:string,end:string;try{start=parseTimestamp(from+' 00:00:00');end=parseTimestamp(to+' 23:59:59.999');}catch{throw new IntegrationError('Select valid calendar dates.');}
  if(start>end)throw new IntegrationError('End date must be on or after start date.');
@@ -36,11 +37,16 @@ export async function conversionDashboard(url:URL,options:{prepare?:boolean;clie
  const source=health.configured?await clickSheetSource():null;
  const sourceReason=source?clickSyncReason(await readClickSyncState(client,source.id),source.id):MATCHING_PENDING;
  const approved=new Set(reviews.filter(r=>!r.reason&&!sourceReason).map(r=>r.match_id));
+ const evidenceAt=(callId:string,fallback:string)=>reviews.find(r=>r.call_id===callId&&!r.reason&&r.interaction_at)?.interaction_at||fallback;
+ const contactAt=(callId:string,fallback:string)=>{
+  const manual=reviews.find(r=>r.call_id===callId&&!r.reason&&r.interaction_at),click=manual?clicks.find(k=>k.id===manual.click_id):undefined;
+  return click&&Date.parse(String(click.clicked_at))>Date.parse(fallback)?String(click.clicked_at):fallback;
+ };
  const matchedCalls=firstInteractions(calls as unknown as InteractionCall[]).filter(g=>g.eligible).map(g=>g.primary);
  const comparison=matchedCalls.length?await readCrmComparison(matchedCalls):[];
  const crm=await getConnection('supabase_crm'),projectRef=crm?.metadata.project_ref||'';
  const candidates:PaymentCandidate[]=[];
-  for(const match of matches){const c=comparison.find(c=>c.callId===match.call_id),click=clicks.find(k=>k.id===match.click_id);if(!approved.has(String(match.id))||!c?.customer||!click?.gclid)continue;for(const payment of c.payments.filter(p=>p.kind==='sale'))candidates.push({matchId:String(match.id),callAt:c.calledAt,clientId:c.customer.id,paymentId:payment.id,amount:payment.amount,paidDate:payment.paidDate,visitAt:payment.visitAt,gclid:String(click.gclid),conversionTime:String(click.clicked_at)});}
+  for(const match of matches){const c=comparison.find(c=>c.callId===match.call_id),click=clicks.find(k=>k.id===match.click_id);if(!approved.has(String(match.id))||!c?.customer||!click?.gclid)continue;for(const payment of c.payments.filter(p=>p.kind==='sale'))candidates.push({matchId:String(match.id),callAt:contactAt(c.callId,c.calledAt),clientId:c.customer.id,paymentId:payment.id,amount:payment.amount,paidDate:payment.paidDate,visitAt:payment.visitAt,gclid:String(click.gclid),conversionTime:String(click.clicked_at)});}
  const expected=projectRef?preparePaymentAttribution(candidates,projectRef):[];
  if(options.prepare&&projectRef){
   const planned=expected.filter(p=>!drafts.some(d=>d.payment_transaction_id===p.payment_transaction_id));
@@ -90,7 +96,7 @@ export async function conversionDashboard(url:URL,options:{prepare?:boolean;clie
   if(time?(Date.parse(time)<Date.parse(range.start)||Date.parse(time)>Date.parse(range.end)):(Date.parse(c.calledAt)<Date.parse(range.start)||Date.parse(c.calledAt)>Date.parse(range.end)))continue;
   items.push({id:'phone:'+p.payment_transaction_id,customer:c.customer!.name,phone:safePhone(c.phone)!,callTime:c.calledAt,repair:c.repairs.map(r=>r.repairCode).join(', '),campaign:'Phone-based; Google attribution pending',gclid:'',paymentId:p.payment_transaction_id,conversionTime:time,amount:payment.profit??0,paymentAmount:payment.amount,chargedAmount:payment.chargedAmount,allocatedCost:payment.allocatedCost,timeBasis:'first_paid_match',historyTotal:c.recordedTotal,ready:!reason,reason});
  }
- const repairs=attributeRepairs(comparison.flatMap(c=>c.customer?c.repairs.map(repair=>({callId:c.callId,phone:c.phone,calledAt:c.calledAt,clientId:c.customer!.id,repair})):[]),projectRef);
+ const repairs=attributeRepairs(comparison.flatMap(c=>c.customer?c.repairs.map(repair=>({callId:c.callId,phone:c.phone,calledAt:contactAt(c.callId,c.calledAt),clientId:c.customer!.id,repair})):[]),projectRef);
  const repairObservations=await conversionObservations(client,repairs.filter(r=>!matches.some(m=>m.call_id===r.callId)).map(r=>({payment_transaction_id:r.id,call_id:r.callId,crm_paid_date:new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Bucharest',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(crmVisitTime(r.repair.entryDate)))})),Boolean(options.prepare&&!sourceReason));
  for(const record of repairs){
   const c=comparison.find(c=>c.callId===record.callId)!,savedMatches=matches.filter(m=>m.call_id===record.callId);
@@ -99,7 +105,7 @@ export async function conversionDashboard(url:URL,options:{prepare?:boolean;clie
   const time=click?String(click.clicked_at):observation?.first_matched_at||'';
   let reason=savedMatches.length>1?'Multiple saved website matches':match&&!approved.has(String(match.id))?'Website match needs verification':match&&!click?'Website click is unavailable':!match&&!observation?'First CRM match time not saved':!match&&observation?.call_id!==record.callId?'Repair was first matched to a different call':'';
   if(!reason&&!click&&Date.parse(time)<crmVisitTime(record.repair.entryDate))reason='CRM repair entry is later than its saved first-match time';
-  if(!reason&&(!Number.isFinite(Date.parse(time))||Date.parse(time)>Date.now()||(click&&Date.parse(time)>Date.parse(c.calledAt))))reason='Invalid conversion timestamp';
+  if(!reason&&(!Number.isFinite(Date.parse(time))||Date.parse(time)>Date.now()||(click&&Date.parse(time)>Date.parse(evidenceAt(c.callId,c.calledAt)))))reason='Invalid conversion timestamp';
   const activity=crmVisitTime(record.repair.entryDate),filterTime=url.searchParams.get('activityDay')?activity:Date.parse(time||c.calledAt);
   if(filterTime<Date.parse(range.start)||filterTime>Date.parse(range.end))continue;
   items.push({id:'repair:'+record.id,customer:c.customer!.name,phone:c.phone,callTime:c.calledAt,repair:record.repair.repairCode,campaign:String(click?.campaign||'Phone-based; Google attribution pending'),gclid:String(click?.gclid||''),paymentId:record.id,conversionTime:time,amount:record.profit,paymentAmount:c.payments.filter(p=>p.repairId===record.repair.id).reduce((sum,p)=>sum+p.amount,0),chargedAmount:Number(record.repair.customerPrice),allocatedCost:Number(record.repair.repairCost),historyTotal:c.recordedTotal,ready:!reason,reason,timeBasis:click?'website_click':'first_crm_match',recordBasis:'repair_record',activityTime:record.repair.entryDate});
@@ -120,7 +126,8 @@ export async function conversionDashboard(url:URL,options:{prepare?:boolean;clie
   const uploaded=uploadedPayments.get(item.paymentId)||legacyPaymentIds.map(id=>uploadedPayments.get(id)).find(Boolean);
   const legacyExported=drafts.some(d=>d.status==='exported'&&legacyPaymentIds.includes(String(d.payment_transaction_id)));
   const callId=itemCall?.callId||'',interactionChannel=String(calls.find(call=>call.id===callId)?.external_id||'').startsWith('whatsapp-manual:')?'whatsapp' as const:'call' as const;
-  return {...item,...extractBraidIdentifiers(click?.page_url,item.gclid),websiteClick:websiteClickDetails(click,item.callTime),callId,interactionChannel,consent:consent||null,financialReady:item.ready,userDataAllowed,ready:item.ready&&userDataAllowed&&!uploaded&&!legacyExported,reason:item.reason||consentReason||(uploaded?'Google upload: '+uploaded.state:legacyExported?'Repair payment already exported':'')};
+  const linked=Boolean(click&&match&&approved.has(String(match.id))&&item.timeBasis==='website_click');
+  return {...item,...extractBraidIdentifiers(click?.page_url,item.gclid),websiteClick:websiteClickDetails(click,evidenceAt(callId,item.callTime)),manualLink:reviews.some(r=>r.call_id===callId&&r.interaction_at&&!r.reason),callId,interactionChannel,consent:consent||null,financialReady:item.ready,userDataAllowed,ready:item.ready&&linked&&userDataAllowed&&!uploaded&&!legacyExported,reason:item.reason||(!linked?WEBSITE_CLICK_REQUIRED:'')||consentReason||(uploaded?'Google upload: '+uploaded.state:legacyExported?'Repair payment already exported':'')};
  });
  return {items:enriched,range,conversionName:name,notice:observations.configured?'':'Phone-only conversions need first-match timestamp storage. Website-click conversions remain available.'};
 }

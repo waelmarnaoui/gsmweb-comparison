@@ -1,0 +1,9 @@
+.manual-click-link{margin-top:10px;max-width:420px;min-width:0;white-space:normal}
+.manual-click-link summary{cursor:pointer}
+.manual-click-link fieldset{display:grid;gap:10px;border:0;padding:12px 0;min-width:0}
+.manual-click-link label{display:grid;gap:4px;min-width:0}
+.manual-click-link label:has(input[type=checkbox]){display:flex;align-items:flex-start}
+.manual-click-link input:not([type=checkbox]),.manual-click-link select,.manual-click-link textarea{width:100%;min-width:0;max-width:100%;box-sizing:border-box}
+.manual-click-link textarea{min-height:76px;resize:vertical}
+.manual-click-link button{white-space:normal;justify-content:center}
+.manual-click-evidence{overflow-wrap:anywhere;min-width:0}
