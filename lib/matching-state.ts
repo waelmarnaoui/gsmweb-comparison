@@ -4,7 +4,7 @@ import {IntegrationError} from './integration-error';
 export const MATCHING_VERSION=2;
 export const MATCHING_PENDING='Matching rules need the approved database update. No new matches will be confirmed until it is installed.';
 export type MatchOption={call_id:string;click_id:string;delay_seconds:number;candidate_count:number;competing_calls:number;related_clicks:number;source_identity:string;settled_at:string;call_matched:boolean;source_claimed:boolean};
-export type MatchReview={match_id:string;call_id:string;click_id:string;reason:string};
+export type MatchReview={match_id:string;call_id:string;click_id:string;reason:string;interaction_at?:string};
 export async function matchingHealth(client:SupabaseClient){
  const {data,error}=await client.rpc('ga_matching_health');
  if(error){if(['PGRST202','42883'].includes(error.code))return {configured:false,version:0};throw new IntegrationError('Matching readiness could not be checked.',503);}
@@ -27,7 +27,16 @@ export async function matchReviews(client:SupabaseClient){
  for(let offset=0;offset<10000;offset+=500){
   const {data,error}=await client.from('ga_match_reviews').select('match_id,call_id,click_id,reason').order('match_id').range(offset,offset+499);
   if(error)throw new IntegrationError('Saved attribution could not be verified.',503);
-  rows.push(...(data||[]));if((data||[]).length<500)return rows;
+  rows.push(...(data||[]));if((data||[]).length<500){
+   const manual:MatchReview[]=[];
+   for(let page=0;page<10000;page+=500){
+    const result=await client.from('ga_manual_click_reviews').select('*').order('match_id').range(page,page+499);
+    if(result.error){if(['42P01','PGRST205'].includes(result.error.code))return rows;throw new IntegrationError('Manual website links could not be verified.',503);}
+    manual.push(...(result.data||[]));
+    if((result.data||[]).length<500)return rows.map(row=>manual.find(link=>link.match_id===row.match_id)||row);
+   }
+   throw new IntegrationError('Manual website link limit reached.',503);
+  }
  }
  throw new IntegrationError('Saved attribution limit reached. No partial verification was returned.',503);
 }

@@ -1,8 +1,10 @@
 import {createHash} from 'node:crypto';
 import {validationPayload} from './google-ads-events';
+import {websiteLinkedConversion} from './conversion-upload-policy';
 export type AdsRow=Parameters<typeof validationPayload>[0][number];
 export type ManifestEntry={paymentId:string;fingerprint:string};
 export function reviewedManifest(rows:AdsRow[]){
+ rows=rows.filter(websiteLinkedConversion);
  if(!rows.some(row=>row.ready))return [];
  const payload=validationPayload(rows);
  return payload.events.map(event=>{

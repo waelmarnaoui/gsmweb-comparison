@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
 import {IntegrationError} from './integration-error';
+import {websiteLinkedConversion,WEBSITE_CLICK_REQUIRED} from './conversion-upload-policy';
 import {safePhone} from './crm-comparison';
 import {consentAllowsUserData,type ClientConsent} from './client-consent';
 
@@ -9,6 +10,7 @@ type Row={ready:boolean;paymentId:string;conversionTime:string;amount:number;pho
 export function validationPayload(rows:Row[],now=Date.now()){
  const eligible=rows.filter(row=>row.ready);
  if(!eligible.length||eligible.length>2000)throw new IntegrationError('Select between 1 and 2000 consented conversions.');
+ if(eligible.some(row=>!websiteLinkedConversion(row)))throw new IntegrationError(WEBSITE_CLICK_REQUIRED,409);
  const seen=new Set<string>();
  const events=eligible.map(row=>{
   const phone=safePhone(row.phone),time=Date.parse(row.conversionTime);

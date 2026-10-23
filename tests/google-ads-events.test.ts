@@ -5,8 +5,8 @@ import {CONSENT_SCRIPT_VERSION,type ClientConsent} from '../lib/client-consent';
 const now=Date.parse('2026-10-11T12:00:00Z');
 const consent:ClientConsent={id:'1',crm_project_ref:'project',client_id:'client',phone:'+40712345678',ad_user_data:'granted',ad_personalization:'not_asked',obtained_at:'2026-10-11T10:00:00Z',recorded_at:'2026-10-11T11:00:00Z',recorded_by:'staff',script_version:CONSENT_SCRIPT_VERSION};
 const row={ready:true,paymentId:'project:payment',conversionTime:'2026-10-10T09:00:00+03:00',amount:205.01,phone:consent.phone,gclid:'click',consent,timeBasis:'website_click'};
-test('all WhatsApp events include the required event source',()=>{
- assert.equal(validationPayload([{...row,gclid:'',timeBasis:'first_paid_match',interactionChannel:'whatsapp'}],now).events[0].eventSource,'MESSAGE');
+test('WhatsApp requires a website click and uses the website event source',()=>{
+ assert.throws(()=>validationPayload([{...row,gclid:'',timeBasis:'first_paid_match',interactionChannel:'whatsapp'}],now),/verified website click/);
  assert.equal(validationPayload([{...row,interactionChannel:'whatsapp'}],now).events[0].eventSource,'WEB');
 });
 test('API validation preserves profit, timestamp, destination and hashes phone',()=>{
@@ -28,7 +28,5 @@ test('validation excludes blocked rows and rejects duplicates and unconfirmed co
  assert.equal(validationPayload([{...row,amount:0}],now).events[0].conversionValue,0);
  assert.throws(()=>validationPayload([{...row,amount:NaN}],now));
  assert.throws(()=>validationPayload([{...row,conversionTime:'2027-01-01T00:00:00Z'}],now));
- const payload=validationPayload([{...row,gclid:'',timeBasis:'first_paid_match'}],now);
- assert.equal(payload.events[0].eventSource,'PHONE');
- assert.equal(payload.events[0].adIdentifiers,undefined);
+ assert.throws(()=>validationPayload([{...row,gclid:'',timeBasis:'first_paid_match'}],now),/verified website click/);
 });
