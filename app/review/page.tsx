@@ -10,6 +10,7 @@ import type {readCrmDay} from '@/lib/crm-reader';
 import {reviewSection} from '@/lib/review-loading';
 import {WebsiteClickEvidence} from '@/components/website-click-details';
 import {ManualClickLink} from '@/components/manual-click-link';
+import {WebsiteTimeResolution} from '@/components/website-time-resolution';
 
 type Item=Awaited<ReturnType<typeof conversionDashboard>>['items'][number];
 type Choices={measurement:ConsentStatus;personalization:ConsentStatus;obtainedAt:string};
@@ -78,6 +79,7 @@ export default function Review(){
  return <div className="setup-page consent-review"><header className="setup-header"><a href="/"><ArrowLeft size={16}/>Dashboard</a><a href="/ads">Google Ads connection</a></header><main className="setup-main">
  <div className="section-heading"><h1>Conversion review</h1><button className="secondary" disabled={busy||!from||!to} onClick={()=>refresh()}><RefreshCw size={16}/>Refresh</button></div>
  <p className="review-notice">Google uploads: verified website-click conversions only.</p>
+ <WebsiteTimeResolution/>
  <div className="review-filters">{<label>From<input type="date" value={from} disabled={busy} onChange={e=>date('from',e.target.value)}/></label>}<label>To<input type="date" value={to} disabled={busy} onChange={e=>date('to',e.target.value)}/></label><label><input type="checkbox" checked={daily} disabled={busy} onChange={e=>{setDaily(e.target.checked);setManifest([]);setConfirmed(false);}}/>Filter by repair entry date</label><span>Google Ads 205-043-4247 · Goal 7835048106</span></div>
  <div className="workspace-counts"><div><small>Matched repairs / sales</small><strong>{items.length}</strong></div><div><small>Ready to send</small><strong>{manifest.length}</strong></div><div><small>Needs review</small><strong>{items.filter(item=>!item.ready&&!uploadedIds.has(item.paymentId)).length}</strong></div><div><small>Upload batches</small><strong>{batches.length}</strong></div></div>
  <div className="review-main-tabs" role="tablist" aria-label="Conversion workspace">{([["conversions","Conversions"],["sources","Source records"],["history","Upload history"]] as const).map(([key,label])=><button key={key} role="tab" aria-selected={panel===key} onClick={()=>setPanel(key)}>{label}</button>)}</div>
