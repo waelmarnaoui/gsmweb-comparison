@@ -5,6 +5,7 @@ import {eventKey,clickImportRows,clickImportFailure,type ClickImportStage,type E
 import {parseClickRows} from './sheet-parser';
 import {IntegrationError} from './integration-error';
 import {clickSyncReason,type ClickSyncState} from './click-sync-state';
+import {readSheetTimeResolutions} from './sheet-time-store';
 
 export async function readClickSyncState(client:SupabaseClient,sheetId:string){
  const {data,error}=await client.from('ga_sheet_sync_state').select('sheet_id,synced_at,action').eq('sheet_id',sheetId).maybeSingle();
@@ -19,7 +20,7 @@ export async function syncClickSheet(client:SupabaseClient,force=false){
   return {inserted:0,received:0,cached:true};
  try{
   stage='read';const sheetRows=await readClickSheet(source);
-  stage='parse';const values=parseClickRows(sheetRows);received=values.length;
+  stage='parse';const values=parseClickRows(sheetRows,await readSheetTimeResolutions(source.id));received=values.length;
   stage='compare';
   const keys=[...new Set(values.map(v=>eventKey(source.id,v)))],existing:ExistingClick[]=[];
   for(let i=0;i<keys.length;i+=100){

@@ -1,4 +1,7 @@
 const zone = 'Europe/Bucharest';
+export class AmbiguousRomanianTime extends Error {
+ constructor(public readonly candidates:string[]){super('This Romanian time occurred twice when clocks went back. Resolve the website timestamp in Conversion Review.');}
+}
 const formatter = new Intl.DateTimeFormat('en-GB', {timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'});
 function parts(date: Date) {
  const p = Object.fromEntries(formatter.formatToParts(date).map(p => [p.type, p.value]));
@@ -31,7 +34,8 @@ export function parseTimestamp(input: string): string {
  const wanted = `${String(year).padStart(4,'0')}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')} ${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}:${String(second).padStart(2,'0')}`;
  // Validate both Romanian offsets: DST gaps and repeated hours cannot be guessed safely.
  const candidates = [2, 3].map(offset => new Date(wall - offset * 3600000)).filter(date => parts(date) === wanted);
- if (candidates.length !== 1) throw new Error('This Romanian daylight-saving time is missing or ambiguous. Include +02:00 or +03:00.');
+ if(candidates.length===2)throw new AmbiguousRomanianTime(candidates.map(date=>date.toISOString()));
+ if (candidates.length !== 1) throw new Error('This Romanian daylight-saving time does not exist. Correct the source timestamp or include its actual UTC offset.');
  return candidates[0].toISOString();
 }
 function validateCalendar(year:number,month:number,day:number,hour:number,minute:number,second:number){
