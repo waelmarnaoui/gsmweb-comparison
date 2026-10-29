@@ -42,9 +42,9 @@ export async function saveBulkGroup(actor:string,input:BulkSelection,campaignId:
 export async function publishBulkGroup(actor:string,id:string,hash:string,confirmed:boolean){
  const db=service(),account=agentAccount(),locks=controlStore(db),google=bulkGoogle({account,token:async()=>(await connectionToken('google_ads_management')).token,loginCustomerId:process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID,developerToken:process.env.GOOGLE_ADS_DEVELOPER_TOKEN});
  const guard=async()=>{
-  // This owner-confirmed create-only workflow uploads PAUSED groups. It cannot
-  // resume automatic control or enable spending, even when automation is paused.
-  await locks.settings(account);
+  // Explicitly reviewed creation enables only the new group, never its parent campaign.
+  const settings=await locks.settings(account);
+  if(settings.global_paused)throw new IntegrationError('Account controls are globally paused. Review controls before enabling spending.',409);
  };
  try{return await submitBulkGroup({actor,hash,confirmed,guard,google,uncertain:e=>e instanceof ControlProviderError&&e.uncertain,errorCode:e=>e instanceof ControlProviderError?[e.code,...e.diagnostics].join(':').slice(0,250):'bulk_validation_failed',quota:async e=>{if(isGoogleQuotaError(e)){const r=await db.from('ga_audit').insert({actor,action:'quota',entity:'google_ads_read_gate',record_id:account,details:{source:'manual_bulk_submission'}});if(r.error)throw storage();}},store:{
   lock:()=>locks.lock(account),unlock:t=>locks.unlock(account,t),fence:t=>locks.fence(account,t),

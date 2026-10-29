@@ -18,4 +18,4 @@ export const BULK_FAMILIES=[
  {id:'oppo',label:'Oppo',models:['A54','A57','A58','A78','A98','Reno8','Reno10','Reno11','Reno12'].map(m=>'Oppo '+m)},
 ] as const;
 export type BulkFamily=typeof BULK_FAMILIES[number]['id'];
-export const BULK_COPY_VERSION='bulk-replacement-exact-v2';
+export const BULK_COPY_VERSION='bulk-replacement-exact-enabled-v3';

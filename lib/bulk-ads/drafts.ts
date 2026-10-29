@@ -71,7 +71,7 @@ export function bulkCreateOperations(account:string,campaignId:string,draft:Bulk
  assertBulkDraft(draft);if(!/^\d{10}$/.test(account)||!/^\d{1,20}$/.test(campaignId))throw new Error('Invalid Google destination.');
  if(strategy==='MANUAL_CPC'&&(!cpcMicros||!/^\d{1,9}$/.test(cpcMicros)||Number(cpcMicros)<10000||Number(cpcMicros)>100000000))throw new Error('Enter an approved maximum CPC in account currency for this manual-bidding campaign.');
  const group=`customers/${account}/adGroups/-1`;
- return [{adGroupOperation:{create:{resourceName:group,campaign:`customers/${account}/campaigns/${campaignId}`,name:draft.groupName,status:'PAUSED',type:'SEARCH_STANDARD',...(strategy==='MANUAL_CPC'?{cpcBidMicros:cpcMicros}:{})}}},
+ return [{adGroupOperation:{create:{resourceName:group,campaign:`customers/${account}/campaigns/${campaignId}`,name:draft.groupName,status:'ENABLED',type:'SEARCH_STANDARD',...(strategy==='MANUAL_CPC'?{cpcBidMicros:cpcMicros}:{})}}},
  ...draft.keywords.map(k=>({adGroupCriterionOperation:{create:{adGroup:group,status:'ENABLED',keyword:{text:k.text,matchType:'EXACT'}}}})),
  ...draft.ads.map(ad=>({adGroupAdOperation:{create:{adGroup:group,status:'ENABLED',ad:{finalUrls:[draft.landingUrl],responsiveSearchAd:{headlines:ad.headlines.map(text=>({text,...(text==='Cu Montaj In Magazin'?{pinnedField:'HEADLINE_1'}:{})})),descriptions:ad.descriptions.map((text,i)=>({text,...(i===0?{pinnedField:'DESCRIPTION_1'}:{})}))}}}}}))];
 }

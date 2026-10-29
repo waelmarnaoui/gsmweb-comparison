@@ -30,7 +30,7 @@ export function bulkGoogle(o:Options){
    const {data,requestId}=await request('googleAds:mutate',{mutateOperations:operations,partialFailure:false,validateOnly:false},true),responses=data.mutateOperationResponses;
    const group=responses?.[0]?.adGroupResult?.resourceName,ads=responses?.slice(-row.draft.ads.length).map((v:any)=>v.adGroupAdResult?.resourceName);
    if(!Array.isArray(responses)||responses.length!==operations.length||typeof group!=='string'||!new RegExp(`^customers/${o.account}/adGroups/\\d+$`).test(group)||ads.some((ad:unknown)=>typeof ad!=='string'||!ad.startsWith(`customers/${o.account}/adGroupAds/${group.split('/').at(-1)}~`)||!/^\d+$/.test(ad.split('~')[1])))throw new ControlProviderError('google_bulk_receipt_unconfirmed',true);
-   return {groupResource:group,adResources:ads,requestId,groupStatus:'PAUSED',googleReview:'PENDING',notice:'Submitted to Google in a paused group. No spending was enabled.'};
+   return {groupResource:group,adResources:ads,requestId,groupStatus:'ENABLED',googleReview:'PENDING',notice:'Submitted to Google in an enabled group. Eligible ads can spend if the campaign is enabled.'};
   }
  };
 }
