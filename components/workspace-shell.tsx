@@ -6,7 +6,7 @@ import {usePathname} from 'next/navigation';
 import {ArrowLeft,BarChart3,Bot,ChevronDown,ClipboardCheck,FileCheck,LayoutList,Menu,MessageCircle,Package,Settings,ShieldCheck,Sparkles,Target,X} from 'lucide-react';
 import './workspace.css';
 import './workspace-responsive.css';
-const marketing=[['/optimizer','AI chat',Bot],['/optimizer/ads','Ads & status',LayoutList],['/ai-ads/opportunities','Create ads',Sparkles],['/ai-ads','Stock & drafts',Package],['/optimizer/keywords','Keywords',Target],['/optimizer/reports','Campaign reports',BarChart3],['/ai-ads/control','Account controls',ShieldCheck],['/optimizer/settings','Settings & activity',Settings]] as const;
+const marketing=[['/optimizer','AI chat',Bot],['/optimizer/ads','Ads & status',LayoutList],['/ai-ads/opportunities','Create ads',Sparkles],['/ai-ads/performance-max','Performance Max',Target],['/ai-ads','Stock & drafts',Package],['/optimizer/keywords','Keywords',Target],['/optimizer/reports','Campaign reports',BarChart3],['/ai-ads/control','Account controls',ShieldCheck],['/optimizer/settings','Settings & activity',Settings]] as const;
 const conversions=[['/review','Conversion review',ClipboardCheck],['/whatsapp','WhatsApp leads',MessageCircle],['/crm','CRM comparison',Target],['/ads','Google Ads connection',FileCheck]] as const;
 export default function WorkspaceShell({children}:{children:ReactNode}){
  const path=usePathname(),[open,setOpen]=useState(false),isMarketing=path.startsWith('/optimizer')||path.startsWith('/ai-ads');

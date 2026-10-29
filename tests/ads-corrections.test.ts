@@ -22,7 +22,7 @@ test('one factual correction preserves mandatory disclosure, keywords and landin
  assert.match(fixed.draft.pinnedHeadlines![0].text,/cu montaj in magazin/i);assert.match(fixed.draft.pinnedDescriptions![0].text,/numai cu montaj.*nu se vinde separat/i);
  assert.equal(makeEditorialCorrection(fixed,rejected,part,now),null);assert.equal(makeEditorialCorrection(plan,rejected,{...part,eligible:false},now),null);
  assert.equal(makeEditorialCorrection(plan,rejected,part,now)!.key,fixed.key);
- const ops=creationOperations(fixed);assert.ok(!JSON.stringify(ops).includes('updateMask'));assert.equal((ops[0] as any).adGroupOperation.create.status,'PAUSED');
+ const ops=creationOperations(fixed);assert.ok(!JSON.stringify(ops).includes('updateMask'));assert.equal((ops[0] as any).adGroupOperation.create.status,'ENABLED');
  assert.equal(makeEditorialCorrection(plan,{...rejected,topics:[{topic:'SPACING',type:'PROHIBITED'}]},part,now),null,'no changed spacing means no pointless resubmission');
 });
 test('a correction cannot claim or mutate an original ad and is held when its parent evidence changes',()=>{

@@ -18,7 +18,7 @@ export function makeEditorialCorrection(parent:PublicationPlan,f:PublicationFeed
  if(!pinnedHeadlines?.some(p=>p.field==='HEADLINE_1'&&/cu montaj in magazin/i.test(p.text))||!pinnedDescriptions?.some(p=>p.field==='DESCRIPTION_1'&&/numai cu montaj.*nu se vinde separat/i.test(p.text)))return null;
  const key=digest({parent:parent.key,headlines,descriptions,rule:'editorial-normalization-v1'}),stamp=new Date(now).toISOString();
  const draft={...parent.draft,id:key,headlines,descriptions,pinnedHeadlines,pinnedDescriptions,variants:undefined,inventoryFingerprint:part.fingerprint,stockAtGeneration:part.available,partPriceAtGenerationBani:part.partPriceBani,createdAt:stamp,contentHash:digest({headlines,descriptions,pinnedHeadlines,pinnedDescriptions})};
- return {...parent,key,groupName:parent.groupName.replace(/ \| GSMWEB-AI-.*/,'')+' | GSMWEB-AI-'+key.slice(0,12)+'-C1',stock:part,draft,createdAt:stamp,correction:{parentId:parent.key,attempt:1,topics}};
+ return {...parent,key,initialStatus:'ENABLED',groupName:parent.groupName.replace(/ \| GSMWEB-AI-.*/,'')+' | GSMWEB-AI-'+key.slice(0,12)+'-C1',stock:part,draft,createdAt:stamp,correction:{parentId:parent.key,attempt:1,topics}};
 }
 
 export function correctionParentMatches(child:PublicationPlan,parent:{id:string;account_id:string;plan:PublicationPlan;group_resource:string|null;ad_resource:string|null;pending_operation:string|null;state:string;error_code:string|null},f:PublicationFeedback|null){

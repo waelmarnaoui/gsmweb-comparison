@@ -19,13 +19,15 @@ export function createPublicationEngine(o:Options){
     if(await policyOnly()&&!r.plan.correction)return save(r,{error_code:'policy_only_new_publication_blocked'});
     if(!await o.authorized())return save(r,{error_code:'publishing_disabled'});
     const before=await o.guard(r.plan,false);if(before)return save(r,{error_code:before});
+    const activation=await o.guard(r.plan,true);if(activation)return save(r,{error_code:activation});
     if(await o.google.inspect(r.plan))return save(r,{state:'failed',error_code:'publication_group_already_exists'});
     await o.google.create(r.plan,true);
     if(!await o.authorized())return save(r,{error_code:'publishing_disabled'});
     const again=await o.guard(r.plan,false);if(again)return save(r,{error_code:again});
+    const activationAgain=await o.guard(r.plan,true);if(activationAgain)return save(r,{error_code:activationAgain});
     if(await policyOnly()&&!r.plan.correction)return save(r,{error_code:'policy_only_new_publication_blocked'});
     await o.store.fence();r=await save(r,{state:'creating',pending_operation:'create',error_code:null});started=true;
-    const request=await o.google.create(r.plan,false),f=await inspect(r.plan);if(!f||f.groupStatus!=='PAUSED'||f.adStatus!=='ENABLED')throw new Error('publication_unconfirmed');
+    const request=await o.google.create(r.plan,false),f=await inspect(r.plan);if(!f||f.groupStatus!==(r.plan.initialStatus||'PAUSED')||f.adStatus!=='ENABLED')throw new Error('publication_unconfirmed');
     return await save(r,{state:'submitted',pending_operation:null,group_resource:f.groupResource,ad_resource:f.adResource,google_feedback:f,request_id:request,error_code:'google_review_pending'});
    }catch(e){const result=await save(r,{state:started&&(!(e instanceof ControlProviderError)||e.uncertain)?'uncertain':'failed',error_code:failure(e)});if(isGoogleQuotaError(e))throw e;return result;}
   },
@@ -34,7 +36,7 @@ export function createPublicationEngine(o:Options){
    try{
     const f=await inspect(r.plan);if(!f)return save(r,{error_code:r.state==='creating'||r.state==='uncertain'?'publication_unconfirmed':'publication_missing',state:r.state==='creating'?'uncertain':r.state});bound(r,f);
     if(['creating','uncertain'].includes(r.state)){
-     const expected=r.pending_operation==='group_enable'?'ENABLED':'PAUSED';
+     const expected=r.pending_operation==='group_pause'?'PAUSED':r.pending_operation==='create'?(r.plan.initialStatus||'PAUSED'):'ENABLED';
      if(f.groupStatus!==expected)return save(r,{state:'uncertain',google_feedback:f,error_code:'publication_unconfirmed'});
      r=await save(r,{state:f.groupStatus==='ENABLED'?'active':'submitted',pending_operation:null,group_resource:f.groupResource,ad_resource:f.adResource,google_feedback:f,error_code:null});
     }
