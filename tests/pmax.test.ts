@@ -2,7 +2,13 @@ import {test} from 'node:test';import assert from 'node:assert/strict';
 import {PGlite} from '@electric-sql/pglite';import {readFile} from 'node:fs/promises';
 import {PMAX_SERVICES,pmaxOperations,pmaxDraftSchema,pmaxHash,type PmaxDraft,type PmaxRow} from '../lib/pmax/model';
 import {publishPmax} from '../lib/pmax/engine';import {ControlProviderError} from '../lib/ads-control/google';
+import {submitOllamaJob} from '../lib/ollama-advisor';
 const account='2050434247',actor='00000000-0000-0000-0000-000000000001';
+test('PMax uses the protected asynchronous Ollama gateway with broad creative mode and no tools',async()=>{
+ const id='00000000-0000-4000-8000-000000000001';let body:any;
+ await submitOllamaJob({id,key:'private-test-token',baseURL:'https://test.ngrok-free.dev',message:'Generate PMax groups',context:{task:'creative only'},history:[],capabilities:[],replyBudget:8000,creativeMode:'pmax',fetcher:async(_url,init)=>{body=JSON.parse(String(init?.body));return Response.json({id,state:'pending'});}});
+ assert.equal(body.request.max_tokens,8000);assert.ok(body.request.messages.some((m:any)=>m.content.includes('search themes are broad signals')));assert.ok(!JSON.stringify(body).includes('private-test-token'));
+});
 const draft:PmaxDraft={settings:{name:'GSMWeb PMax',dailyUsd:52,location:'geoTargetConstants/123',locationLabel:'Drumul Taberei, Bucharest, Romania',landscape:`customers/${account}/assets/1`,square:`customers/${account}/assets/2`,logo:`customers/${account}/assets/3`,services:[...PMAX_SERVICES],models:'Samsung S22 S23 S24; iPhone; Motorola Xiaomi Oppo OnePlus',finalUrl:'https://gsmweb.site/',businessName:'GSMWeb',conversionId:'7835048106'},copy:{groups:PMAX_SERVICES.map(service=>({service,name:'GSMWeb '+service,headlines:['GSMWeb','Inlocuire Piese Telefon','Drumul Taberei 138'],longHeadlines:['Inlocuire componente pentru telefon la GSMWeb Drumul Taberei'],descriptions:['Confirma modelul si eligibilitatea cu echipa GSMWeb.','Cere oferta pentru telefonul tau.'],themes:['inlocuire display samsung s22','schimbare baterie iphone']}))}};
 test('PMax covers seven repairs with enabled groups, presence, isolated USD budget and CRM goal',()=>{
  const ops=pmaxOperations(account,draft,'id') as any[];
