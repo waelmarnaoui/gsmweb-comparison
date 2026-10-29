@@ -3,11 +3,17 @@ import {sameOrigin} from '@/lib/connections';
 import {IntegrationError} from '@/lib/integration-error';
 import {generatePmax,googlePmax,pmaxRows,pollPmax,savePmax,submitPmax} from '@/lib/pmax/server';
 import {ZodError} from 'zod';
+import {ControlProviderError} from '@/lib/ads-control/google';
 export const maxDuration=120;
 export async function GET(){try{const {user}=await requireAdmin();return Response.json({rows:await pmaxRows(user.id)},{headers:{'Cache-Control':'no-store'}});}catch(error){return apiError(error);}}
 export async function POST(request:Request){try{
  const {user}=await requireAdmin();sameOrigin(request);const text=await request.text();if(Buffer.byteLength(text)>100000)throw new IntegrationError('Request too large.',413);const body=JSON.parse(text);let result;
- if(body.operation==='catalogue')result=await googlePmax().catalogue();
+ if(body.operation==='catalogue'){
+  try{result=await googlePmax().catalogue();}catch(error){
+   if(error instanceof ControlProviderError)throw new IntegrationError('Google locations and images could not be loaded: '+[error.code,...error.diagnostics].join(' · ')+(error.httpStatus===429?'. Google API quota was reached. Retry manually later; no automatic retry was made.':'. Check the Google Ads connection and account access.'),error.httpStatus===429?429:503);
+   throw new IntegrationError(error instanceof Error?error.message:'Google locations and images are unavailable.',503);
+  }
+ }
  else if(body.operation==='generate')result=await generatePmax(user.id,body.settings);
  else if(body.operation==='poll')result=await pollPmax(user.id,body.id);
  else if(body.operation==='save')result=await savePmax(user.id,body.id,body.draft,body.version);

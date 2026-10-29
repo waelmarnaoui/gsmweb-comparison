@@ -9,7 +9,7 @@ function mock(failReadback=false){const calls:any[]=[];const api=pmaxGoogle({acc
  if(body.query){let results:any[]=[];
  if(body.query.includes('FROM customer '))results=[{customer:{id:account,currencyCode:'USD'}}];
  else if(body.query.includes('FROM asset '))results=[{asset:{resourceName:root+'/assets/1',imageAsset:{fullSize:{widthPixels:'1200',heightPixels:'628',url:'https://example.test/image.jpg'}}}},{asset:{resourceName:root+'/assets/2',imageAsset:{fullSize:{widthPixels:'1200',heightPixels:'1200',url:'https://example.test/square.jpg'}}}}];
- else if(body.query.includes('FROM geo_target_constant'))results=[{geoTargetConstant:{resourceName:'geoTargetConstants/123',canonicalName:'Drumul Taberei',targetType:'Neighborhood'}}];
+ else if(body.query.includes('FROM geo_target_constant')){assert.doesNotMatch(body.query,/\bOR\b/);assert.match(body.query,/name REGEXP_MATCH/);assert.match(body.query,/country_code = 'RO'/);results=[{geoTargetConstant:{resourceName:'geoTargetConstants/123',canonicalName:'Drumul Taberei',targetType:'Neighborhood'}}];}
  else if(body.query.includes('FROM conversion_action'))results=[{conversionAction:{id:'7835048106',status:'ENABLED',type:'UPLOAD_CLICKS'}}];
  else if(body.query.includes('FROM campaign')){if(failReadback)return Response.json({error:{status:'RESOURCE_EXHAUSTED'}},{status:429});results=[{campaign:{resourceName:root+'/campaigns/55',status:'ENABLED'}}];}
  return Response.json({results});
