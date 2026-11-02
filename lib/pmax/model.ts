@@ -23,7 +23,8 @@ export function pmaxOperations(account:string,raw:PmaxDraft,id:string){
   {campaignCriterionOperation:{create:{campaign,location:{geoTargetConstant:s.location}}}},
   {campaignCriterionOperation:{create:{campaign,language:{languageConstant:'languageConstants/1032'}}}}
  ];
- function text(value:string,fieldType:string,group?:string){const resourceName=root+'/assets/'+temp--;operations.push({assetOperation:{create:{resourceName,textAsset:{text:value}}}});operations.push(!group?{campaignAssetOperation:{create:{campaign,asset:resourceName,fieldType}}}:{assetGroupAssetOperation:{create:{assetGroup:group,asset:resourceName,fieldType}}});}
+ const textAssets=new Map<string,string>();
+ function text(value:string,fieldType:string,group?:string){let resourceName=textAssets.get(value);if(!resourceName){resourceName=root+'/assets/'+temp--;textAssets.set(value,resourceName);operations.push({assetOperation:{create:{resourceName,textAsset:{text:value}}}});}operations.push(!group?{campaignAssetOperation:{create:{campaign,asset:resourceName,fieldType}}}:{assetGroupAssetOperation:{create:{assetGroup:group,asset:resourceName,fieldType}}});}
  text(s.businessName,'BUSINESS_NAME');
  operations.push({campaignAssetOperation:{create:{campaign,asset:s.logo,fieldType:'LOGO'}}});
  for(const [index,c] of draft.copy.groups.entries()){
@@ -33,5 +34,9 @@ export function pmaxOperations(account:string,raw:PmaxDraft,id:string){
  for(const [asset,fieldType] of [[s.landscape,'MARKETING_IMAGE'],[s.square,'SQUARE_MARKETING_IMAGE']])operations.push({assetGroupAssetOperation:{create:{assetGroup:group,asset,fieldType}}});
  for(const text of [...new Set(c.themes)])operations.push({assetGroupSignalOperation:{create:{assetGroup:group,searchTheme:{text}}}});
  }
- return operations;
+ // Google evaluates minimum asset counts after each consecutive link block.
+ // Do not interrupt that block with asset creates, groups or search themes.
+ // Brand links likewise immediately follow the new campaign.
+ const order=['campaignBudgetOperation','customConversionGoalOperation','assetOperation','campaignOperation','campaignAssetOperation','conversionGoalCampaignConfigOperation','campaignCriterionOperation','assetGroupOperation','assetGroupAssetOperation','assetGroupSignalOperation'];
+ return order.flatMap(type=>operations.filter(operation=>type in operation));
 }
