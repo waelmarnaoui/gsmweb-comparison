@@ -1,11 +1,12 @@
 import {z} from 'zod';
 import {createHash} from 'node:crypto';
+import {PMAX_MODEL_LIMIT} from './models';
 const line=(max:number)=>z.string().trim().min(1).max(max).refine(v=>!/[{}<>\r\n]/.test(v),'Use plain ad copy without keyword insertion.');
 export const PMAX_SERVICES=['display','glass','backglass','battery','charging','camera','other'] as const;
 const groupSchema=z.object({service:z.enum(PMAX_SERVICES),name:line(80),headlines:z.array(line(30)).min(3).max(15),longHeadlines:z.array(line(90)).min(1).max(5),descriptions:z.array(line(90)).min(2).max(5),themes:z.array(line(80)).min(1).max(50)}).strict().refine(v=>v.headlines.some(h=>h.length<=15),'Include one headline of 15 characters or fewer.');
 export const pmaxCopySchema=z.object({groups:z.array(groupSchema).min(1).max(7)}).strict().refine(v=>new Set(v.groups.map(g=>g.service)).size===v.groups.length,'Duplicate repair category.');
 const asset=z.string().regex(/^customers\/\d{10}\/assets\/\d+$/);
-export const pmaxSettingsSchema=z.object({name:line(100),dailyUsd:z.number().min(1).max(1000),location:z.string().regex(/^geoTargetConstants\/\d+$/),locationLabel:line(150),landscape:asset,square:asset,logo:asset,services:z.array(z.enum(PMAX_SERVICES)).min(1).max(7),models:z.string().trim().min(10).max(1800),finalUrl:z.string().url().refine(v=>{const u=new URL(v);return u.protocol==='https:'&&['gsmweb.site','www.gsmweb.site'].includes(u.hostname)&&!u.username&&!u.password&&!u.port;}),businessName:z.literal('GSMWeb'),conversionId:z.literal('7835048106')}).strict();
+export const pmaxSettingsSchema=z.object({name:line(100),dailyUsd:z.number().min(1).max(1000),location:z.string().regex(/^geoTargetConstants\/\d+$/),locationLabel:line(150),landscape:asset,square:asset,logo:asset,services:z.array(z.enum(PMAX_SERVICES)).min(1).max(7),models:z.string().trim().min(10).max(PMAX_MODEL_LIMIT),finalUrl:z.string().url().refine(v=>{const u=new URL(v);return u.protocol==='https:'&&['gsmweb.site','www.gsmweb.site'].includes(u.hostname)&&!u.username&&!u.password&&!u.port;}),businessName:z.literal('GSMWeb'),conversionId:z.literal('7835048106')}).strict();
 export const pmaxDraftSchema=z.object({settings:pmaxSettingsSchema,copy:pmaxCopySchema}).strict().refine(v=>v.settings.services.length===v.copy.groups.length&&v.settings.services.every(s=>v.copy.groups.some(g=>g.service===s)),'Generate every selected repair category.');
 export type PmaxDraft=z.infer<typeof pmaxDraftSchema>;
 export type PmaxRow={id:string;actor:string;account_id:string;state:string;version:number;draft:PmaxDraft|null;input:z.infer<typeof pmaxSettingsSchema>;content_hash:string|null;result:unknown;error_code:string|null;created_at:string};
