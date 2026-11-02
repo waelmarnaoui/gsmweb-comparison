@@ -18,7 +18,7 @@ export function pmaxOperations(account:string,raw:PmaxDraft,id:string){
  const operations:Record<string,unknown>[]=[
   {campaignBudgetOperation:{create:{resourceName:budget,name:s.name+' '+id,amountMicros:String(Math.round(s.dailyUsd*1000000)),deliveryMethod:'STANDARD',explicitlyShared:false}}},
   {customConversionGoalOperation:{create:{resourceName:goal,name:'GSMWeb CRM '+id,conversionActions:[`${root}/conversionActions/${s.conversionId}`]}}},
-  {campaignOperation:{create:{resourceName:campaign,name:s.name+' · '+id.slice(0,8),status:'ENABLED',advertisingChannelType:'PERFORMANCE_MAX',campaignBudget:budget,maximizeConversionValue:{},brandGuidelinesEnabled:true,urlExpansionOptOut:true,containsEuPoliticalAdvertising:'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING',geoTargetTypeSetting:{positiveGeoTargetType:'PRESENCE'}}}},
+  {campaignOperation:{create:{resourceName:campaign,name:s.name+' · '+id.slice(0,8),status:'ENABLED',advertisingChannelType:'PERFORMANCE_MAX',campaignBudget:budget,maximizeConversionValue:{},brandGuidelinesEnabled:true,assetAutomationSettings:[{assetAutomationType:'FINAL_URL_EXPANSION_TEXT_ASSET_AUTOMATION',assetAutomationStatus:'OPTED_OUT'}],containsEuPoliticalAdvertising:'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING',geoTargetTypeSetting:{positiveGeoTargetType:'PRESENCE'}}}},
   {conversionGoalCampaignConfigOperation:{update:{resourceName:root+'/conversionGoalCampaignConfigs/-2',goalConfigLevel:'CAMPAIGN',customConversionGoal:goal},updateMask:'goal_config_level,custom_conversion_goal'}},
   {campaignCriterionOperation:{create:{campaign,location:{geoTargetConstant:s.location}}}},
   {campaignCriterionOperation:{create:{campaign,language:{languageConstant:'languageConstants/1032'}}}}

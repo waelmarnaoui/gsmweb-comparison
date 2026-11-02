@@ -14,7 +14,7 @@ test('PMax covers seven repairs with enabled groups, presence, isolated USD budg
  const ops=pmaxOperations(account,draft,'id') as any[];
  assert.equal(ops.filter(o=>o.assetGroupOperation).length,7);
  assert.ok(ops.filter(o=>o.assetGroupOperation).every(o=>o.assetGroupOperation.create.status==='ENABLED'));
- const campaign=ops.find(o=>o.campaignOperation).campaignOperation.create;assert.equal(campaign.status,'ENABLED');assert.equal(campaign.geoTargetTypeSetting.positiveGeoTargetType,'PRESENCE');assert.equal(campaign.urlExpansionOptOut,true);assert.equal(campaign.advertisingChannelType,'PERFORMANCE_MAX');
+ const campaign=ops.find(o=>o.campaignOperation).campaignOperation.create;assert.equal(campaign.status,'ENABLED');assert.equal(campaign.geoTargetTypeSetting.positiveGeoTargetType,'PRESENCE');assert.equal('urlExpansionOptOut' in campaign,false);assert.deepEqual(campaign.assetAutomationSettings,[{assetAutomationType:'FINAL_URL_EXPANSION_TEXT_ASSET_AUTOMATION',assetAutomationStatus:'OPTED_OUT'}]);assert.equal(campaign.advertisingChannelType,'PERFORMANCE_MAX');
  assert.equal(ops[0].campaignBudgetOperation.create.amountMicros,'52000000');assert.equal(ops[0].campaignBudgetOperation.create.explicitlyShared,false);
  assert.ok(ops.some(o=>o.campaignAssetOperation?.create.fieldType==='LOGO'));assert.ok(ops.some(o=>o.campaignAssetOperation?.create.fieldType==='BUSINESS_NAME'));
  assert.equal(ops.filter(o=>o.assetGroupAssetOperation?.create.fieldType==='MARKETING_IMAGE').length,7);
