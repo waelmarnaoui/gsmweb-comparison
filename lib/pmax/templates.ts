@@ -1,4 +1,5 @@
 import {pmaxCopySchema,pmaxSettingsSchema} from './model';
+import {pmaxModelThemes} from './models';
 const copy={
  display:['Inlocuire Display Telefon','Inlocuire display'],
  glass:['Inlocuire Sticla Display','Inlocuire sticla display'],
@@ -16,7 +17,7 @@ export function pmaxTemplate(raw:unknown){
    headlines:['GSMWeb',headline,'Drumul Taberei 138','Cere Oferta Pentru Telefon','Confirma Modelul Cu Echipa'],
    longHeadlines:[headline+' la GSMWeb in Drumul Taberei. Cere o oferta.'],
    descriptions:service==='glass'?['Pastreaza displayul original daca panoul si functia tactila permit schimbarea sticlei.','Confirma modelul si eligibilitatea cu echipa GSMWeb. Cere o oferta.']:['Confirma modelul si disponibilitatea cu echipa GSMWeb. Cere o oferta.','GSMWeb, Drumul Taberei 138. Evaluare in functie de model si defect.'],
-   themes:['iPhone','Samsung S22','Samsung S23','Samsung S24','Motorola','Xiaomi','Oppo','OnePlus'].map(model=>term.toLowerCase()+' '+model)};
+   themes:pmaxModelThemes(settings.models,term)};
  });
  return {settings,copy:pmaxCopySchema.parse({groups})};
 }
