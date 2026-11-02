@@ -14,6 +14,10 @@ function mock(failReadback=false){const calls:any[]=[];const api=pmaxGoogle({acc
  else if(body.query.includes('FROM campaign')){if(failReadback)return Response.json({error:{status:'RESOURCE_EXHAUSTED'}},{status:429});results=[{campaign:{resourceName:root+'/campaigns/55',status:'ENABLED'}}];}
  return Response.json({results});
  }
+ const campaign=body.mutateOperations.find((op:any)=>op.campaignOperation)?.campaignOperation.create;
+ // v26 REST rejects removed fields before normal GoogleAdsFailure validation.
+ if('urlExpansionOptOut' in campaign)return Response.json({error:{status:'INVALID_ARGUMENT',message:'Invalid JSON payload received. Unknown name "urlExpansionOptOut".'}},{status:400});
+ assert.deepEqual(campaign.assetAutomationSettings,[{assetAutomationType:'FINAL_URL_EXPANSION_TEXT_ASSET_AUTOMATION',assetAutomationStatus:'OPTED_OUT'}]);
  if(body.validateOnly)return Response.json({});return Response.json({mutateOperationResponses:body.mutateOperations.map((op:any)=>op.campaignOperation?{campaignResult:{resourceName:root+'/campaigns/55'}}:{})});
  }});return {api,calls};}
 test('PMax transport verifies USD, location, all images, conversion action then validates and creates enabled atomically',async()=>{

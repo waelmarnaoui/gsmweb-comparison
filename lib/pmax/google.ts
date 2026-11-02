@@ -1,12 +1,13 @@
 import {ADS_REPORTING_VERSION} from '../ads-monitor';
-import {ControlProviderError,safeGoogleCodes} from '../ads-control/google';
+import {ControlProviderError} from '../ads-control/google';
+import {pmaxGoogleDiagnostics} from './google-errors';
 import {pmaxOperations,type PmaxRow,type PmaxDraft} from './model';
 export function pmaxGoogle(o:{account:string;token:()=>Promise<string>;login?:string;developerToken?:string;fetcher?:typeof fetch}){
  if(!/^\d{10}$/.test(o.account)||o.login&&!/^\d{10}$/.test(o.login))throw new Error('Invalid Google account.');
  async function request(path:string,body:unknown,write=false){
   let response:Response;try{response=await(o.fetcher??fetch)(`https://googleads.googleapis.com/${ADS_REPORTING_VERSION}/customers/${o.account}/${path}`,{method:'POST',headers:{Authorization:'Bearer '+await o.token(),'Content-Type':'application/json',...(o.login?{'login-customer-id':o.login}:{}),...(o.developerToken?{'developer-token':o.developerToken}:{})},body:JSON.stringify(body),cache:'no-store',redirect:'error',signal:AbortSignal.timeout(20000)});}catch{throw new ControlProviderError('pmax_transport_unconfirmed',write);}
   let data;try{data=await response.json();}catch{throw new ControlProviderError('pmax_response_unconfirmed',write);}
-  if(!response.ok||data.error||data.partialFailureError)throw new ControlProviderError('pmax_google_rejected',write&&(response.status>=500||response.status===408||response.ok),safeGoogleCodes(data),response.status);
+  if(!response.ok||data.error||data.partialFailureError)throw new ControlProviderError('pmax_google_rejected',write&&(response.status>=500||response.status===408||response.ok),pmaxGoogleDiagnostics(data),response.status);
   return {data,requestId:response.headers.get('request-id')};
  }
  async function search(query:string){const {data}=await request('googleAds:search',{query});if(data.nextPageToken||data.results!==undefined&&!Array.isArray(data.results))throw new Error('Google report is incomplete.');return data.results||[];}
