@@ -12,7 +12,7 @@ export async function POST(request:Request){
   if(!history.configured)throw new IntegrationError('Upload history is not installed. Run the approved attribution database setup first.',503);
   const text=await request.text();let batchId='';
   if(text){let body;try{body=JSON.parse(text);}catch{throw new IntegrationError('Invalid status request.');}if(typeof body?.batchId!=='string'||!/^[0-9a-f-]{36}$/i.test(body.batchId))throw new IntegrationError('Choose a valid upload batch.');batchId=body.batchId;}
-  const records=history.records.filter(row=>row.request_id&&(!batchId||row.batch_id===batchId)).sort((a,b)=>a.updated_at.localeCompare(b.updated_at));
+  const records=history.records.filter(row=>row.request_id&&(batchId?row.batch_id===batchId:row.state==='submitted')).sort((a,b)=>a.updated_at.localeCompare(b.updated_at));
   const batches=[...new Map(records.map(row=>[row.batch_id,row])).values()].slice(0,batchId?1:3);
   if(batchId&&!batches.length)throw new IntegrationError('No saved Google receipt for this batch. No retry was attempted.',409);
   if(!batches.length)return Response.json({message:history.records.length?'No pending Google requests. Uncertain requests remain locked against resending.':'No conversions have been sent yet. Review consent, then use Send to Google; Check Google status does not upload.'},{headers:{'Cache-Control':'no-store'}});

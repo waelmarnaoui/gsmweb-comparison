@@ -24,8 +24,10 @@ Record the independent evidence and confirm the association before saving.
 The association is customer-level: it links the first-interaction record and its
 eligible CRM repairs/sales, retaining the selected follow-up as evidence. A new
 conversion is not created for each callback. Repair profit, consent, attribution
-dates and upload-history checks still apply. Conversion time remains the original
-website-click time; GCLID and captured braid identifiers are not fabricated.
+dates and upload-history checks still apply. Website-linked repair events use
+the recorded CRM repair intake time. The verified click supplies attribution
+identifiers and must precede that intake. GCLID and captured braid identifiers
+come from the original click.
 
 Existing matches cannot be overwritten. A click/GCLID source cannot be assigned
 to a second customer. Customers with any reserved or submitted upload are blocked

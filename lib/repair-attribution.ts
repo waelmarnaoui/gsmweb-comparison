@@ -11,6 +11,10 @@ export function crmVisitTime(value:string){
  const timestamp=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(value)?value+'Z':value;
  try{return Date.parse(parseTimestamp(timestamp));}catch{return NaN;}
 }
+export function repairConversionTime(entryDate:string,clickedAt:string,now=Date.now()){
+ const visit=crmVisitTime(entryDate),click=Date.parse(clickedAt);
+ return Number.isFinite(click)&&visit>click&&visit<=now?new Date(visit).toISOString():'';
+}
 type Candidate={callId:string;phone:string;calledAt:string;clientId:string;repair:CrmRepair};
 export function repairEligibility(candidate:Candidate,projectRef:string,now=Date.now()){
  const call=Date.parse(candidate.calledAt),visit=crmVisitTime(candidate.repair.entryDate);

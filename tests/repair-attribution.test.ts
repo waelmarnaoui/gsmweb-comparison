@@ -1,10 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {attributeRepairs,repairProfit,crmVisitTime} from '../lib/repair-attribution';
+import {attributeRepairs,repairProfit,crmVisitTime,repairConversionTime} from '../lib/repair-attribution';
 import {reviewDay,isReviewDay} from '../lib/review-day';
 const repair={id:'r1',clientId:'client',repairCode:'GSM1',phoneModel:'Phone',entryDate:'2026-10-11T10:00:00Z',status:'RECEIVED',customerPrice:'450.00',repairCost:'150.00'};
 const candidate={callId:'missed',phone:'+40722882726',calledAt:'2026-10-10T06:42:16Z',clientId:'client',repair};
 const now=Date.parse('2026-10-11T12:00:00Z');
+test('uses the recorded repair intake time and requires it to follow the associated click',()=>{
+ assert.equal(repairConversionTime(repair.entryDate,'2026-10-10T06:40:00Z',now),'2026-10-11T10:00:00.000Z');
+ assert.equal(repairConversionTime('2026-10-11T13:00:00+03:00','2026-10-10T06:40:00Z',now),'2026-10-11T10:00:00.000Z');
+ for(const click of ['','2026-10-11T10:00:00Z','2026-10-11T11:00:00Z'])assert.equal(repairConversionTime(repair.entryDate,click,now),'');
+ assert.equal(repairConversionTime('2026-10-11','2026-10-10T06:40:00Z',now),'');
+ assert.equal(repairConversionTime('2026-10-12T10:00:00Z','2026-10-10T06:40:00Z',now),'');
+});
 test('one WhatsApp contact can produce two independent repair conversions without payments',()=>{
  const contact={...candidate,callId:'whatsapp',phone:'+40723358266',calledAt:'2026-10-12T11:26:00Z'};
  const first={...repair,id:'phone-one',entryDate:'2026-10-12T12:00:00Z'},second={...first,id:'phone-two',repairCost:200};
